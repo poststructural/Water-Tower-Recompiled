@@ -128,3 +128,18 @@ by symbol (the Release build now writes a PDB).
 - CPU-executor shims in `recomp_manual.c` (semaphore registration, the
   BlockOnTime "close" answer) are compiled out under `ANI_NV2A_VK`: the
   NV2A model writes the semaphore and raises the interrupts itself.
+
+### Windows polish (2026-10-17, afternoon)
+
+- **Sound** works: `RECOMP_AUDIO_WAV=<file>` (patches/ngbrecomp-0002) records
+  what the APU hands SDL; movies and menu music come through.
+- **Warner lot 40 -> 60 fps.** The GPU thread spent ~60% of its time in
+  `lru_visit_active`: every texture bound on a written page walked all 1024
+  texture-cache entries to mark overlapping ones possibly dirty, per draw.
+  patches/ngbrecomp-0003 replaces the walk with per-page write generations
+  (a texture is possibly dirty when a page it spans is newer than its last
+  hash) and clears the flag once a bound texture is re-hashed (xemu left it
+  set, re-hashing on every bind). Measured: steady 60 fps, jitter < 1 ms.
+- Profiling the Vulkan build: it writes `Animaniacs.pdb`; the GPU model has
+  line tables; `-DANI_PROFILE_NOINLINE=ON` keeps its helpers out of line;
+  `python scripts/sample_profile.py 10 --lines` while the game runs.

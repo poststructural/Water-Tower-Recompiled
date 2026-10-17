@@ -35,7 +35,7 @@ class STACKFRAME64(ctypes.Structure):
 def main():
     shots = int(sys.argv[1]) if len(sys.argv) > 1 else 20
     depth = int(sys.argv[2]) if len(sys.argv) > 2 else 12
-    name = sys.argv[3] if len(sys.argv) > 3 else "animaniacs_recomp.exe"
+    name = sys.argv[3] if len(sys.argv) > 3 else "Animaniacs.exe"
     pid = find_pid(name)
     k32.OpenProcess.restype = wt.HANDLE
     k32.OpenThread.restype = wt.HANDLE

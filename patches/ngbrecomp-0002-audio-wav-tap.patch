@@ -1,0 +1,66 @@
+diff --git a/xboxrecomp/src/apu/apu_sdl_out.c b/xboxrecomp/src/apu/apu_sdl_out.c
+index 2023c1b..99e173f 100644
+--- a/xboxrecomp/src/apu/apu_sdl_out.c
++++ b/xboxrecomp/src/apu/apu_sdl_out.c
+@@ -10,9 +10,53 @@
+ #include <SDL.h>
+ #include <stdio.h>
+ #include <stdlib.h>
++#include <stdint.h>
++#include <string.h>
+ #include "apu_sdl_out.h"
+ 
+ static SDL_AudioDeviceID s_dev;
++
++/* RECOMP_AUDIO_WAV=<path>: also write what is queued to a 48 kHz stereo WAV,
++ * header patched every second so a killed run still leaves a valid file.
++ * For checking what a title plays on a machine nobody is listening to. */
++static FILE *s_wav;
++static uint32_t s_wav_bytes, s_wav_since_patch;
++
++static void wav_header(FILE *f, uint32_t data_bytes)
++{
++    uint8_t h[44] = { 'R','I','F','F', 0,0,0,0, 'W','A','V','E', 'f','m','t',' ',
++                      16,0,0,0, 1,0, 2,0, 0x80,0xBB,0,0, 0,0xEE,2,0, 4,0, 16,0,
++                      'd','a','t','a', 0,0,0,0 };
++    uint32_t riff = data_bytes + 36;
++    memcpy(h + 4, &riff, 4);
++    memcpy(h + 40, &data_bytes, 4);
++    fseek(f, 0, SEEK_SET);
++    fwrite(h, 1, 44, f);
++    fseek(f, 0, SEEK_END);
++}
++
++static void wav_write(const int16_t *frames, int n)
++{
++    static int tried;
++    if (!tried) {
++        const char *p = getenv("RECOMP_AUDIO_WAV");
++        tried = 1;
++        if (p && *p && (s_wav = fopen(p, "wb")) != NULL) {
++            wav_header(s_wav, 0);
++            fprintf(stderr, "[APU] writing output to %s\n", p);
++        }
++    }
++    if (!s_wav)
++        return;
++    fwrite(frames, 4, (size_t)n, s_wav);
++    s_wav_bytes += (uint32_t)n * 4;
++    s_wav_since_patch += (uint32_t)n * 4;
++    if (s_wav_since_patch >= 48000 * 4) {
++        s_wav_since_patch = 0;
++        wav_header(s_wav, s_wav_bytes);
++        fflush(s_wav);
++    }
++}
+ static int s_failed;
+ static int s_playing;
+ 
+@@ -81,6 +125,7 @@ void apu_sdl_out_submit(const int16_t *frames, int n)
+     const Uint32 prebuffer = 1536 * 4;          /* ~32 ms */
+     Uint32 queued;
+ 
++    wav_write(frames, n);
+     if (!s_dev)
+         return;
+     queued = SDL_GetQueuedAudioSize(s_dev);

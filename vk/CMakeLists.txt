@@ -89,4 +89,16 @@ if(WIN32)
     set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME Animaniacs
                           WIN32_EXECUTABLE ${ANI_GUI})
     target_link_libraries(${PROJECT_NAME} PRIVATE winmm dbghelp)
+    # A PDB beside the exe: every lifted function is a symbol (sub_XXXXXXXX),
+    # so crash reports and scripts/sample_profile.py name guest functions.
+    target_link_options(${PROJECT_NAME} PRIVATE -Wl,--pdb=)
+    # Line tables for the GPU model, the usual hot spot in a profile.
+    target_compile_options(xbox_nv2a_vk PRIVATE -gcodeview -gline-tables-only)
+endif()
+
+# Profiling aid: ANI_PROFILE_NOINLINE=ON keeps the GPU model's helpers out of
+# line, so a sample lands in the function that is actually hot.
+option(ANI_PROFILE_NOINLINE "No inlining in the GPU model (profiling)" OFF)
+if(ANI_PROFILE_NOINLINE)
+    target_compile_options(xbox_nv2a_vk PRIVATE -fno-inline -fno-inline-functions)
 endif()

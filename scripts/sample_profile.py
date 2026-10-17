@@ -47,6 +47,12 @@ class SYMBOL_INFO(ctypes.Structure):
                 ("MaxNameLen", wt.ULONG), ("Name", ctypes.c_char * 256)]
 
 
+class IMAGEHLP_LINE64(ctypes.Structure):
+    _fields_ = [("SizeOfStruct", wt.DWORD), ("Key", ctypes.c_void_p),
+                ("LineNumber", wt.DWORD), ("FileName", ctypes.c_char_p),
+                ("Address", ctypes.c_uint64)]
+
+
 def find_pid(name):
     import subprocess
     out = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {name}", "/FO", "CSV",
@@ -69,9 +75,14 @@ def threads_of(pid):
     k32.CloseHandle(snap)
 
 
+LINES = "--lines" in sys.argv
+if LINES:
+    sys.argv.remove("--lines")
+
+
 def main():
     secs = float(sys.argv[1]) if len(sys.argv) > 1 else 10
-    name = sys.argv[2] if len(sys.argv) > 2 else "animaniacs_recomp.exe"
+    name = sys.argv[2] if len(sys.argv) > 2 else "Animaniacs.exe"
     pid = find_pid(name)
     hproc = k32.OpenProcess(PROCESS_ALL, False, pid)
     dbg.SymSetOptions(0x2 | 0x4)  # undname, deferred loads
@@ -100,6 +111,13 @@ def main():
                 cache[rip] = (sym.Name.decode() if dbg.SymFromAddr(
                     hproc, ctypes.c_uint64(rip), ctypes.byref(disp), ctypes.byref(sym))
                     else f"?{rip:x}")
+                if LINES:
+                    ln = IMAGEHLP_LINE64(SizeOfStruct=ctypes.sizeof(IMAGEHLP_LINE64))
+                    d32 = wt.DWORD()
+                    if dbg.SymGetLineFromAddr64(hproc, ctypes.c_uint64(rip),
+                                                ctypes.byref(d32), ctypes.byref(ln)):
+                        f = ln.FileName.decode(errors="replace").replace("\\", "/")
+                        cache[rip] += f" ({f.rsplit('/', 1)[-1]}:{ln.LineNumber})"
             per_thread[tid][cache[rip]] += 1
             total[cache[rip]] += 1
         n += 1

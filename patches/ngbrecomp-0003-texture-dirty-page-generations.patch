@@ -1,0 +1,200 @@
+diff --git a/xboxrecomp/src/nv2a_vk/host/nv2a_dirty.c b/xboxrecomp/src/nv2a_vk/host/nv2a_dirty.c
+index dde14c4..f19e93c 100644
+--- a/xboxrecomp/src/nv2a_vk/host/nv2a_dirty.c
++++ b/xboxrecomp/src/nv2a_vk/host/nv2a_dirty.c
+@@ -291,6 +291,27 @@ void nv2a_dirty_init(void *base, size_t size, void *alias, size_t alias_size)
+             alias ? " (+ tiled alias)" : "");
+ }
+ 
++/* Every page of [addr, addr+size) is hot: left writable, so every check by a
++ * non-render-target client reports it dirty and clears nothing. The texture
++ * cache uses this to skip telling other textures on these pages that they may
++ * have changed -- their own checks will say so -- which was a walk of the
++ * whole cache per texture per draw while a title streamed into a hot page. */
++bool nv2a_dirty_range_hot(hwaddr addr, hwaddr size)
++{
++    unsigned p0, p1;
++
++    if (!s_enabled || !size)
++        return false;
++    p0 = (unsigned)(addr / PAGE);
++    p1 = (unsigned)((addr + size - 1) / PAGE);
++    if (p1 >= s_pages)
++        return false;
++    for (unsigned p = p0; p <= p1; p++)
++        if (!s_hot[p])
++            return false;
++    return true;
++}
++
+ int nv2a_dirty_enabled(void)
+ {
+     return s_enabled;
+diff --git a/xboxrecomp/src/nv2a_vk/xemu/pgraph/vk/renderer.h b/xboxrecomp/src/nv2a_vk/xemu/pgraph/vk/renderer.h
+index f049c49..f928deb 100644
+--- a/xboxrecomp/src/nv2a_vk/xemu/pgraph/vk/renderer.h
++++ b/xboxrecomp/src/nv2a_vk/xemu/pgraph/vk/renderer.h
+@@ -228,6 +228,7 @@ typedef struct TextureBinding {
+     VmaAllocation allocation;
+     VkSampler sampler;
+     bool possibly_dirty;
++    uint32_t checked_gen;  /* xboxrecomp: page generation its hash was taken at */
+     uint64_t hash;
+     unsigned int draw_time;
+     uint32_t submit_time;
+diff --git a/xboxrecomp/src/nv2a_vk/xemu/pgraph/vk/texture.c b/xboxrecomp/src/nv2a_vk/xemu/pgraph/vk/texture.c
+index 44cd93e..697e8c6 100644
+--- a/xboxrecomp/src/nv2a_vk/xemu/pgraph/vk/texture.c
++++ b/xboxrecomp/src/nv2a_vk/xemu/pgraph/vk/texture.c
+@@ -400,30 +400,26 @@ static TextureLayout *get_texture_layout(PGRAPHState *pg, int texture_idx)
+     return layout;
+ }
+ 
+-struct pgraph_texture_possibly_dirty_struct {
+-    hwaddr addr, end;
+-};
+-
+-static void mark_textures_possibly_dirty_visitor(Lru *lru, LruNode *node, void *opaque)
++/* xboxrecomp: which textures a write may have changed, by page generation.
++ *
++ * xemu marked every cached texture overlapping a dirty range by walking the
++ * whole texture cache (up to 1024 entries) -- once per dirty texture per
++ * draw. A title that keeps writing near its textures paid that walk on every
++ * draw: in Animaniacs' first level it was most of the GPU thread's time and
++ * held the game to ~40 fps. Instead each page carries the generation of the
++ * last write seen on it, and a texture is possibly dirty when any page it
++ * spans is newer than the generation its contents were last hashed at. The
++ * cost moves to the texture being bound, and is the pages it spans. */
++static uint32_t *s_page_gen;
++static size_t s_page_gen_count;
++static uint32_t s_gen = 1;
++
++static void page_gen_ensure(NV2AState *d)
+ {
+-    struct pgraph_texture_possibly_dirty_struct *test = opaque;
+-
+-    TextureBinding *tnode = container_of(node, TextureBinding, node);
+-    if (tnode->possibly_dirty) {
+-        return;
++    if (!s_page_gen) {
++        s_page_gen_count = memory_region_size(d->vram) >> TARGET_PAGE_BITS;
++        s_page_gen = g_malloc0_n(s_page_gen_count, sizeof(*s_page_gen));
+     }
+-
+-    uintptr_t k_tex_addr = tnode->key.texture_vram_offset;
+-    uintptr_t k_tex_end = k_tex_addr + tnode->key.texture_length - 1;
+-    bool overlapping = !(test->addr > k_tex_end || k_tex_addr > test->end);
+-
+-    if (tnode->key.palette_length > 0) {
+-        uintptr_t k_pal_addr = tnode->key.palette_vram_offset;
+-        uintptr_t k_pal_end = k_pal_addr + tnode->key.palette_length - 1;
+-        overlapping |= !(test->addr > k_pal_end || k_pal_addr > test->end);
+-    }
+-
+-    tnode->possibly_dirty |= overlapping;
+ }
+ 
+ void pgraph_vk_mark_textures_possibly_dirty(NV2AState *d,
+@@ -433,16 +429,41 @@ void pgraph_vk_mark_textures_possibly_dirty(NV2AState *d,
+     addr &= TARGET_PAGE_MASK;
+     assert(end <= memory_region_size(d->vram));
+ 
+-    struct pgraph_texture_possibly_dirty_struct test = {
+-        .addr = addr,
+-        .end = end,
+-    };
++    page_gen_ensure(d);
++    uint32_t gen = ++s_gen;
++    for (size_t p = addr >> TARGET_PAGE_BITS;
++         p <= (end >> TARGET_PAGE_BITS) && p < s_page_gen_count; p++) {
++        s_page_gen[p] = gen;
++    }
++}
+ 
+-    lru_visit_active(&d->pgraph.vk_renderer_state->texture_cache,
+-                     mark_textures_possibly_dirty_visitor,
+-                     &test);
++static bool range_newer_than(NV2AState *d, hwaddr addr, hwaddr size,
++                             uint32_t gen)
++{
++    if (!size)
++        return false;
++    page_gen_ensure(d);
++    for (size_t p = addr >> TARGET_PAGE_BITS;
++         p <= ((addr + size - 1) >> TARGET_PAGE_BITS) && p < s_page_gen_count;
++         p++) {
++        if ((int32_t)(s_page_gen[p] - gen) > 0)
++            return true;
++    }
++    return false;
+ }
+ 
++static bool texture_node_possibly_dirty(NV2AState *d, TextureBinding *n)
++{
++    return n->possibly_dirty ||
++           range_newer_than(d, n->key.texture_vram_offset,
++                            n->key.texture_length, n->checked_gen) ||
++           (n->key.palette_length &&
++            range_newer_than(d, n->key.palette_vram_offset,
++                             n->key.palette_length, n->checked_gen));
++}
++
++extern bool nv2a_dirty_range_hot(hwaddr addr, hwaddr size);   /* host/nv2a_dirty.c */
++
+ static bool check_texture_dirty(NV2AState *d, hwaddr addr, hwaddr size)
+ {
+     hwaddr end = TARGET_PAGE_ALIGN(addr + size);
+@@ -460,15 +481,20 @@ static bool check_texture_possibly_dirty(NV2AState *d,
+                                          unsigned int palette_length)
+ {
+     bool possibly_dirty = false;
++    /* xboxrecomp: a hot range (host/nv2a_dirty.c) reads dirty for every
++     * texture that checks it and is never cleared, so marking the others is
++     * redundant -- and was a walk of the whole texture cache per draw. */
+     if (check_texture_dirty(d, texture_vram_offset, length)) {
+         possibly_dirty = true;
+-        pgraph_vk_mark_textures_possibly_dirty(d, texture_vram_offset, length);
++        if (!nv2a_dirty_range_hot(texture_vram_offset, length))
++            pgraph_vk_mark_textures_possibly_dirty(d, texture_vram_offset, length);
+     }
+     if (palette_length && check_texture_dirty(d, palette_vram_offset,
+                                                      palette_length)) {
+         possibly_dirty = true;
+-        pgraph_vk_mark_textures_possibly_dirty(d, palette_vram_offset,
+-                                            palette_length);
++        if (!nv2a_dirty_range_hot(palette_vram_offset, palette_length))
++            pgraph_vk_mark_textures_possibly_dirty(d, palette_vram_offset,
++                                                palette_length);
+     }
+     return possibly_dirty;
+ }
+@@ -1379,7 +1405,7 @@ static void create_texture(PGRAPHState *pg, int texture_idx)
+     if (binding_found) {
+         NV2A_VK_DPRINTF("Cache hit");
+         r->texture_bindings[texture_idx] = snode;
+-        possibly_dirty |= snode->possibly_dirty;
++        possibly_dirty |= texture_node_possibly_dirty(d, snode);
+     } else {
+         possibly_dirty = true;
+     }
+@@ -1442,6 +1468,12 @@ static void create_texture(PGRAPHState *pg, int texture_idx)
+                 upload_texture_image(pg, texture_idx, snode);
+                 snode->hash = content_hash;
+             }
++            /* Hashed against its memory as of now: clean until the next
++             * write (xemu left it dirty, and re-hashed it on every bind). */
++            if (possibly_dirty) {
++                snode->possibly_dirty = false;
++                snode->checked_gen = s_gen;
++            }
+         }
+ 
+         NV2A_VK_DGROUP_END();
+@@ -1453,6 +1485,7 @@ static void create_texture(PGRAPHState *pg, int texture_idx)
+     memcpy(&snode->key, &key, sizeof(key));
+     snode->current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+     snode->possibly_dirty = false;
++    snode->checked_gen = s_gen;
+     snode->hash = content_hash;
+ 
+     VkColorFormatInfo vkf = shape_vkf(&state);
