@@ -75,13 +75,21 @@ Needs a GPU with Vulkan 1.3 drivers.
 ```bash
 scripts/setup_vk.sh                                  # once: fork, patches, llvm-mingw, libraries
 TK=tools/ngbrecomp/xboxrecomp XBE=game/default.xbe scripts/regen.sh
-cmake -S vk -B build-vk -G Ninja \n    -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/windows-llvm-mingw.cmake
+cmake -S vk -B build-vk -G Ninja \
+    -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/windows-llvm-mingw.cmake
 ninja -C build-vk
-# The clang64 DLLs (SDL2, glib, ...) must be on PATH or next to the exe:
-PATH="work/windeps/sysroot/clang64/bin:work/windeps/llvm-mingw-20260922-ucrt-x86_64/x86_64-w64-mingw32/bin:$PATH" \n    build-vk/Animaniacs.exe game
+# The build folder is a runnable game folder: the DLLs are copied beside the
+# exe. Put (or link) your game files in build-vk/game, then:
+build-vk/Animaniacs.exe
 ```
 
-Saves go to `%LOCALAPPDATA%\AnimaniacsRecompiled` (`ANI_SAVE_DIR` overrides).
+Saves and `log.txt` go to `%LOCALAPPDATA%\AnimaniacsRecompiled` (`ANI_SAVE_DIR`
+overrides). `settings.ini` is written beside the exe on first run: window size,
+fullscreen (F11 / Alt+Enter in game), vsync, render scale (1-4, default 2 =
+1280x960), MSAA, texture filtering, and `skip_intro`. F10 shows the frame rate.
+
+Test switches: `ANI_LEVEL=N` (1-5) loads level N instead of the hub;
+`RECOMP_AUDIO_WAV=out.wav` records the audio output.
 
 ## Layout
 

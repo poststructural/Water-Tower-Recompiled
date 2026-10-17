@@ -35,6 +35,7 @@
 #include "usb/ohci.h"
 #include "nv2a_vk_runtime.h"
 #include "nv2a_window.h"
+#include "settings.h"
 
 extern void xbox_InputInit(void);
 
@@ -49,6 +50,23 @@ extern int recomp_dispatch_init(void);
 
 static char s_game_dir[4096];
 static bool s_headless;
+static AniSettings s_settings;
+
+/* Create a directory and its parents (the save folder on first run). */
+static void ani_mkdirs(const char *path)
+{
+    char buf[4096];
+    snprintf(buf, sizeof buf, "%s", path);
+    for (char *p = buf + 1; *p; p++) {
+        if (*p == '/' || *p == '\\') {
+            char c = *p;
+            *p = 0;
+            CreateDirectoryA(buf, NULL);
+            *p = c;
+        }
+    }
+    CreateDirectoryA(buf, NULL);
+}
 
 /* ── Crash reporting ───────────────────────────────────────── */
 
@@ -279,9 +297,25 @@ int main(int argc, char **argv)
 
 #if defined(_WIN32)
     timeBeginPeriod(1);
-    if (AttachConsole(ATTACH_PARENT_PROCESS)) {
-        freopen("CONOUT$", "w", stdout);
-        freopen("CONOUT$", "w", stderr);
+    /* A GUI program: output that was redirected stays where it was sent;
+     * started from a console it goes there; otherwise to log.txt in the
+     * save folder, so a player has something to attach to a bug report. */
+    {
+        HANDLE err = GetStdHandle(STD_ERROR_HANDLE);
+        if (err == NULL || err == INVALID_HANDLE_VALUE ||
+            GetFileType(err) == FILE_TYPE_UNKNOWN) {
+            if (AttachConsole(ATTACH_PARENT_PROCESS)) {
+                freopen("CONOUT$", "w", stdout);
+                freopen("CONOUT$", "w", stderr);
+            } else {
+                char log[4200];
+                save_dir_path(log, sizeof log - 16);
+                ani_mkdirs(log);
+                strcat(log, "/log.txt");
+                if (freopen(log, "w", stdout))
+                    freopen(log, "a", stderr);
+            }
+        }
     }
 #endif
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -308,6 +342,17 @@ int main(int argc, char **argv)
     printf("=== Animaniacs: The Great Edgar Hunt - Static Recompilation (Vulkan) ===\n");
     printf("Game directory: %s\n", s_game_dir);
 
+    {
+        extern int ani_skip_intro;   /* recomp_manual.c */
+        char exe[4096], save[4096];
+        exe_dir(exe, sizeof exe);
+        save_dir_path(save, sizeof save);
+        ani_mkdirs(save);
+        ani_settings_load(&s_settings, exe, save);
+        ani_skip_intro = s_settings.skip_intro;
+        printf("Settings: %s\n", s_settings.path);
+    }
+
 #if defined(_WIN32)
     SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_UNDNAME);
     SymInitialize(GetCurrentProcess(), NULL, TRUE);
@@ -315,8 +360,10 @@ int main(int argc, char **argv)
     AddVectoredExceptionHandler(1, veh_handler);
 
     if (!s_headless) {
-        if (nv2a_window_create("Animaniacs: The Great Edgar Hunt", 1280, 960,
-                               0, 4.0 / 3.0, 1) != 0) {
+        if (nv2a_window_create("Animaniacs: The Great Edgar Hunt",
+                               s_settings.width, s_settings.height,
+                               s_settings.fullscreen, 4.0 / 3.0,
+                               s_settings.vsync) != 0) {
             fprintf(stderr, "Cannot open the game window.\n");
             return 1;
         }

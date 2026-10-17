@@ -71,6 +71,7 @@ target_compile_options(ani_gen PRIVATE
 
 add_executable(${PROJECT_NAME}
     ${ANI_ROOT}/src/main_vk.c
+    ${ANI_ROOT}/src/settings.c
     ${ANI_ROOT}/src/recomp_manual.c
     $<TARGET_OBJECTS:ani_gen>)
 target_compile_definitions(${PROJECT_NAME} PRIVATE ANI_NV2A_VK)
@@ -83,9 +84,9 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 target_compile_options(${PROJECT_NAME} PRIVATE -O2 -fno-strict-aliasing)
 
 if(WIN32)
-    # A console program while it is being brought up: its log is the
-    # debugging tool. ANI_GUI=ON builds the windowed-only program.
-    option(ANI_GUI "Build without a console window" OFF)
+    # A windowed program (no console); its output goes where it was redirected,
+    # else to the parent console, else to log.txt (src/main_vk.c). ANI_GUI=OFF: console.
+    option(ANI_GUI "Build without a console window" ON)
     set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME Animaniacs
                           WIN32_EXECUTABLE ${ANI_GUI})
     target_link_libraries(${PROJECT_NAME} PRIVATE winmm dbghelp)
@@ -94,6 +95,21 @@ if(WIN32)
     target_link_options(${PROJECT_NAME} PRIVATE -Wl,--pdb=)
     # Line tables for the GPU model, the usual hot spot in a profile.
     target_compile_options(xbox_nv2a_vk PRIVATE -gcodeview -gline-tables-only)
+    # The DLLs it needs beside it (cmake/copy_dlls.cmake), so the build
+    # folder is a runnable game folder.
+    find_package(Python3 COMPONENTS Interpreter)
+    get_filename_component(_tc_bin "${CMAKE_C_COMPILER}" DIRECTORY)
+    if(Python3_FOUND)
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND}
+                -DPY=${Python3_EXECUTABLE}
+                -DOBJDUMP=${_tc_bin}/llvm-objdump.exe
+                -DEXE=$<TARGET_FILE:${PROJECT_NAME}>
+                -DSCRIPT=${ANI_ROOT}/tools/ngbrecomp/packaging/windows/dlldeps.py
+                "-DDIRS=${_tc_bin}/../x86_64-w64-mingw32/bin;${ANI_WIN_SYSROOT}/bin"
+                -P ${ANI_ROOT}/cmake/copy_dlls.cmake
+            VERBATIM)
+    endif()
 endif()
 
 # Profiling aid: ANI_PROFILE_NOINLINE=ON keeps the GPU model's helpers out of

@@ -20,6 +20,7 @@
 
 #include <windows.h>
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <stddef.h>   /* ptrdiff_t */
@@ -55,7 +56,7 @@ typedef void (*recomp_func_t)(void);
 #else
 #  define ANI_TLS _Thread_local
 #endif
-extern ANI_TLS uint32_t g_eax;
+extern ANI_TLS uint32_t g_eax, g_esp;
 extern ptrdiff_t g_xbox_mem_offset;
 
 /* ── Manual function overrides ─────────────────────────────── */
@@ -214,6 +215,31 @@ void sub_000B09A0(void)
         GUEST32(ANI_STATE_REQUESTED) = 3u + (uint32_t)want;
     }
     sub_000B09A0_gen();
+}
+
+/* Movie player entry (0x000ECF20, cdecl: the movie's base name). The boot
+ * sequence plays splashig, splashwb, warthog and gi1 through it; the
+ * frontend moves on when no movie is playing, so not starting one skips it.
+ * ani_skip_intro comes from settings.ini (skip_intro). */
+int ani_skip_intro;
+
+extern void sub_000ECF20_gen(void);
+void sub_000ECF20(void)
+{
+    if (ani_skip_intro) {
+        static const char *const boot[] = { "splashig", "splashwb", "warthog", "gi1" };
+        uint32_t name_va = GUEST32(g_esp + 4);
+        const char *name = (const char *)((uintptr_t)g_xbox_mem_offset + name_va);
+        for (unsigned i = 0; name_va && i < sizeof boot / sizeof boot[0]; i++) {
+            if (!strcmp(name, boot[i])) {
+                fprintf(stderr, "[ANI] skip_intro: not playing %s\n", name);
+                g_esp += 4;   /* the ret: pop the caller's return address */
+                g_eax = 0;
+                return;
+            }
+        }
+    }
+    sub_000ECF20_gen();
 }
 
 recomp_func_t recomp_lookup_manual(uint32_t xbox_va)
