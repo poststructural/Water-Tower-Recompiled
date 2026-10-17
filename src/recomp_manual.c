@@ -20,6 +20,7 @@
 
 #include <windows.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdint.h>
 #include <stddef.h>   /* ptrdiff_t */
 
@@ -180,6 +181,39 @@ void sub_0014F4C0(void)
 #if !defined(ANI_NV2A_VK)   /* the NV2A model raises the interrupt */
     g_eax = 0;
 #endif
+}
+
+/* Game state machine step (0x000B09A0): when the requested state at
+ * 0x00313A70 differs from the current one at 0x00313B54 it tears the old one
+ * down and enters the new. States 3..8 are the levels (3 = level 0, the
+ * Warner lot hub; the loader opens resource/level<state-3>.hog).
+ * ANI_LEVEL=N (1-5) turns a request for the hub into one for level N: a test
+ * aid for reaching every level without playing through to it. */
+#define ANI_STATE_CURRENT   0x00313B54u
+#define ANI_STATE_REQUESTED 0x00313A70u
+
+extern void sub_000B09A0_gen(void);
+void sub_000B09A0(void)
+{
+    static int want = -2;
+    if (want == -2) {
+        const char *e = getenv("ANI_LEVEL");
+        want = (e && *e >= '1' && *e <= '5') ? *e - '0' : 0;
+    }
+    if (getenv("ANI_STATE_LOG")) {
+        static uint32_t last_cur = ~0u, last_req = ~0u;
+        uint32_t cur = GUEST32(ANI_STATE_CURRENT), req = GUEST32(ANI_STATE_REQUESTED);
+        if (cur != last_cur || req != last_req)
+            fprintf(stderr, "[ANI] game state %u, requested %u\n", cur, req);
+        last_cur = cur;
+        last_req = req;
+    }
+    if (want && GUEST32(ANI_STATE_REQUESTED) == 3 &&
+        GUEST32(ANI_STATE_CURRENT) != 3) {
+        fprintf(stderr, "[ANI] ANI_LEVEL: entering level %d instead of the hub\n", want);
+        GUEST32(ANI_STATE_REQUESTED) = 3u + (uint32_t)want;
+    }
+    sub_000B09A0_gen();
 }
 
 recomp_func_t recomp_lookup_manual(uint32_t xbox_va)

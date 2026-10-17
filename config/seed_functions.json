@@ -58,5 +58,9 @@
   {
     "start": "0x00107690",
     "note": "after int3 padding outside every detected function (static scan)"
+  },
+  {
+    "start": "0x00096950",
+    "note": "address taken as an immediate at 0x00096B60 (scripts/find_code_pointers.py)"
   }
 ]

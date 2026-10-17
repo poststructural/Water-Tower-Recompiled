@@ -1,0 +1,58 @@
+diff --git a/xboxrecomp/tools/recomp/__main__.py b/xboxrecomp/tools/recomp/__main__.py
+index 3817e82..e9dd241 100644
+--- a/xboxrecomp/tools/recomp/__main__.py
++++ b/xboxrecomp/tools/recomp/__main__.py
+@@ -463,6 +463,9 @@ def main():
+             # still needed) -- just rename them so the emitted body is sub_X_gen.
+             for addr in wrap & known:
+                 translator.func_db[addr]["name"] = f"sub_{addr:08X}_gen"
++                # Calls go to the hand-written sub_X, not past it to the body
++                # (backported from upstream xboxrecomp).
++                translator.func_db[addr]["wrapper_name"] = f"sub_{addr:08X}"
+ 
+             # skip - wrap: defined by hand and not wrapped -> declare-only, which
+             # is exactly what membership in `manual` produces.
+diff --git a/xboxrecomp/tools/recomp/lifter.py b/xboxrecomp/tools/recomp/lifter.py
+index 4672750..a155411 100644
+--- a/xboxrecomp/tools/recomp/lifter.py
++++ b/xboxrecomp/tools/recomp/lifter.py
+@@ -1373,7 +1373,9 @@ class Lifter:
+         that are not known function starts.
+         """
+         if addr in self.func_db:
+-            name = self.func_db[addr].get("name", f"sub_{addr:08X}")
++            info = self.func_db[addr]
++            # A wrapped body is named sub_X_gen; calls go to the wrapper.
++            name = info.get("wrapper_name") or info.get("name", f"sub_{addr:08X}")
+         elif addr in self.label_db:
+             name = self.label_db[addr]
+         else:
+diff --git a/xboxrecomp/tools/recomp/translator.py b/xboxrecomp/tools/recomp/translator.py
+index 54e5f79..1510ccf 100644
+--- a/xboxrecomp/tools/recomp/translator.py
++++ b/xboxrecomp/tools/recomp/translator.py
+@@ -2848,6 +2848,13 @@ class BatchTranslator:
+                 translations.append((addr, name, stub))
+                 stats["failed"] += 1
+ 
++        # A wrapped function's body is sub_X_gen; the hand-written sub_X is
++        # what callers and indirect dispatch must reach, so declare it like
++        # any hand-written function (backported from upstream xboxrecomp).
++        for addr, func_info in func_list:
++            if func_info.get("wrapper_name"):
++                manual_decls[addr] = func_info["wrapper_name"]
++
+         # Any address called but never defined needs a stub, or the link fails.
+         # These are almost all mid-function entry points the function detector
+         # did not split out: a call lands a few bytes inside (or just past) a
+@@ -3064,8 +3071,8 @@ class BatchTranslator:
+         # Sorted by address: recomp_lookup binary-searches this array, so an
+         # appended entry would silently break every lookup past it.
+         dispatch_entries = sorted(
+-            list(translations) + [(addr, name, None)
+-                                  for addr, name in manual_decls.items()],
++            [entry for entry in translations if entry[0] not in manual_decls]
++            + [(addr, name, None) for addr, name in manual_decls.items()],
+             key=lambda e: e[0])
+         dispatch_path = os.path.join(output_dir, f"{prefix}_dispatch.c")
+         self._write_dispatch_table(dispatch_entries, dispatch_path, header_name)
