@@ -18,6 +18,7 @@
  *   - Intercept D3D/audio calls for custom rendering or sound
  */
 
+#include <windows.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stddef.h>   /* ptrdiff_t */
@@ -104,10 +105,9 @@ void nv2a_pb_set_semaphore_target(uint32_t guest_va);
  * to wait on the GPU (the display-mode switch in device creation) hung
  * forever. Hand the executor the semaphore on first entry, then run the
  * original. Needs RECOMP_PB_EXEC=1. */
-extern void sub_0014FA40_gen(void);
-void sub_0014FA40(void)
+static void ani_register_gpu_semaphore(void)
 {
-    static int registered;
+    static volatile int registered;
 
     if (!registered) {
         uint32_t dev = GUEST32(ANI_D3D_DEVICE_PTR);
@@ -119,7 +119,39 @@ void sub_0014FA40(void)
                     sem, dev);
         }
     }
+}
+
+extern void sub_0014FA40_gen(void);
+void sub_0014FA40(void)
+{
+    ani_register_gpu_semaphore();
     sub_0014FA40_gen();
+}
+
+/* D3D KickOff (0x0014F860). Register the semaphore here too, before the
+ * first pushbuffer reaches the GPU: a semaphore release the executor runs
+ * before it knows the target is dropped, and if the last release before a
+ * BlockOnTime was one of those, that wait never ends. */
+extern void sub_0014F860_gen(void);
+void sub_0014F860(void)
+{
+    ani_register_gpu_semaphore();
+    sub_0014F860_gen();
+}
+
+/* D3D's GPU-sync flush (0x0014F830). BlockOnTime calls it after patching a
+ * "wake me" method into the ring, then waits for PGRAPH 0x400B10's fence bits
+ * to match the semaphore -- which only holds once the executor has caught up.
+ * The flush spin is what holds the title back until then, so main.c's
+ * instant flush acknowledgement must stand aside while this one runs. */
+volatile long g_ani_sync_flush;
+
+extern void sub_0014F830_gen(void);
+void sub_0014F830(void)
+{
+    InterlockedIncrement(&g_ani_sync_flush);
+    sub_0014F830_gen();
+    InterlockedDecrement(&g_ani_sync_flush);
 }
 
 recomp_func_t recomp_lookup_manual(uint32_t xbox_va)

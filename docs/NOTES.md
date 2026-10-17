@@ -71,8 +71,11 @@ style startup code; these become stubs and only matter if reached.
   (0x100410 bit 16), which the runtime only clears between commands of the
   pushbuffer walk -- and the walker is also the CPU rasteriser. Loader
   workers wait on events behind it. Answering the flush instantly from a
-  host thread deadlocked D3D's fence wait (GET == PUT but the semaphore
-  never reached the fence), so that was reverted. The real fix is likely a
+  host thread (`ANI_FAST_FLUSH=1`, off by default) lets D3D run more than
+  0x2400 bytes ahead of GET, and BlockOnTime then takes its wake-me path
+  (0x0014FAEA), waiting at 0x0014F7D0 for PGRAPH 0x400B10's fence bits to
+  match the semaphore. The executor never latches 0x400B10 in this title
+  (it reads 0), so that wait never ends. The real fix is likely a
   hardware render back end (`nv2a_backend.h`) so the walk stops being
   rasteriser-bound.
 - The Continue Game confirm dialog draws the whole font atlas full-screen
