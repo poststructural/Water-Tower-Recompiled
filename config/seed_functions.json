@@ -22,5 +22,25 @@
   {
     "start": "0x001D0A54",
     "note": "XPP: code directly after a ret with no padding and no inbound jump (static scan)"
+  },
+  {
+    "start": "0x00074760",
+    "note": ".text callback: address taken as an immediate, follows int3/ret padding, outside every detected function"
+  },
+  {
+    "start": "0x000755D0",
+    "note": ".text callback: address taken as an immediate, follows int3/ret padding, outside every detected function"
+  },
+  {
+    "start": "0x0009C2E0",
+    "note": ".text callback: address taken as an immediate, follows int3/ret padding, outside every detected function"
+  },
+  {
+    "start": "0x00125020",
+    "note": ".text callback: address taken as an immediate, follows int3/ret padding, outside every detected function"
+  },
+  {
+    "start": "0x00125500",
+    "note": ".text callback: address taken as an immediate, follows int3/ret padding, outside every detected function"
   }
 ]
