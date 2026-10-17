@@ -104,7 +104,9 @@ extern ptrdiff_t g_xbox_mem_offset;
  * writes, which is how the GPU reports how far it has got. */
 #define ANI_D3D_DEVICE_PTR  0x0015A388u
 
+#if !defined(ANI_NV2A_VK)
 void nv2a_pb_set_semaphore_target(uint32_t guest_va);
+#endif
 
 /* D3D_BlockOnTime (0x0014FA40): waits until the semaphore at *(device+0x30)
  * reaches a fence, spinning at 0x0014FB77. Nothing writes that semaphore
@@ -114,6 +116,7 @@ void nv2a_pb_set_semaphore_target(uint32_t guest_va);
  * original. Needs RECOMP_PB_EXEC=1. */
 static void ani_register_gpu_semaphore(void)
 {
+#if !defined(ANI_NV2A_VK)   /* the NV2A model writes the semaphore itself */
     static volatile int registered;
 
     if (!registered) {
@@ -126,6 +129,7 @@ static void ani_register_gpu_semaphore(void)
                     sem, dev);
         }
     }
+#endif
 }
 
 extern void sub_0014FA40_gen(void);
@@ -173,7 +177,9 @@ extern void sub_0014F4C0_gen(void);
 void sub_0014F4C0(void)
 {
     sub_0014F4C0_gen();
+#if !defined(ANI_NV2A_VK)   /* the NV2A model raises the interrupt */
     g_eax = 0;
+#endif
 }
 
 recomp_func_t recomp_lookup_manual(uint32_t xbox_va)

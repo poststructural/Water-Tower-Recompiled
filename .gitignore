@@ -18,3 +18,5 @@ tkaXBoxDSPImage.bin
 *.log
 stderr.txt
 /game
+/build-vk/
+/src/recomp/gen/recomp_types.h

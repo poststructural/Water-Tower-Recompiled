@@ -1,3 +1,6 @@
 [submodule "tools/xboxrecomp"]
 	path = tools/xboxrecomp
 	url = https://github.com/sp00nznet/xboxrecomp.git
+[submodule "tools/ngbrecomp"]
+	path = tools/ngbrecomp
+	url = https://github.com/gamboozino/ngbrecomp.git

@@ -1,0 +1,31 @@
+# Native Windows build with llvm-mingw (clang, lld, libc++, UCRT) against MSYS2
+# CLANG64 packages (SDL2, glib, glslang, SPIRV-Tools, Vulkan loader) unpacked
+# into a sysroot. Needed by the ngbrecomp runtime (xemu's Vulkan NV2A
+# renderer), which does not build with MSVC. scripts/fetch_windeps.sh fetches
+# both into work/windeps; ANI_WIN_DEPS overrides.
+set(CMAKE_SYSTEM_NAME Windows)
+set(CMAKE_SYSTEM_PROCESSOR AMD64)
+set(ANI_WIN_DEPS "${CMAKE_CURRENT_LIST_DIR}/../../work/windeps" CACHE PATH "llvm-mingw and the CLANG64 sysroot")
+file(GLOB _llvm_mingw "${ANI_WIN_DEPS}/llvm-mingw-*-ucrt-x86_64")
+list(GET _llvm_mingw 0 _llvm_mingw)
+set(_triple x86_64-w64-mingw32)
+set(CMAKE_C_COMPILER "${_llvm_mingw}/bin/${_triple}-clang.exe")
+set(CMAKE_CXX_COMPILER "${_llvm_mingw}/bin/${_triple}-clang++.exe")
+set(CMAKE_RC_COMPILER "${_llvm_mingw}/bin/${_triple}-windres.exe")
+set(CMAKE_AR "${_llvm_mingw}/bin/llvm-ar.exe")
+set(CMAKE_RANLIB "${_llvm_mingw}/bin/llvm-ranlib.exe")
+set(ANI_WIN_SYSROOT "${ANI_WIN_DEPS}/sysroot/clang64")
+set(CMAKE_FIND_ROOT_PATH "${ANI_WIN_SYSROOT}" "${_llvm_mingw}/${_triple}")
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+set(CMAKE_PREFIX_PATH "${ANI_WIN_SYSROOT}")
+if(NOT PKG_CONFIG_EXECUTABLE)
+    set(PKG_CONFIG_EXECUTABLE "C:/git-sdk-64/mingw64/bin/pkg-config.exe" CACHE FILEPATH "")
+endif()
+set(ENV{PKG_CONFIG_LIBDIR} "${ANI_WIN_SYSROOT}/lib/pkgconfig;${ANI_WIN_SYSROOT}/share/pkgconfig")
+set(ENV{PKG_CONFIG_SYSROOT_DIR} "${ANI_WIN_DEPS}/sysroot")
+set(ENV{PKG_CONFIG_PATH} "")
+set(CMAKE_C_STANDARD_INCLUDE_DIRECTORIES "${ANI_WIN_SYSROOT}/include")
+set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES "${ANI_WIN_SYSROOT}/include")

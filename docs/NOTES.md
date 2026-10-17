@@ -104,3 +104,27 @@ echo start >> live.txt     # each appended line is a press: a, b, up, start ...
 
 `scripts/sample_profile.py` and `scripts/thread_stacks.py` sample a live run
 by symbol (the Release build now writes a PDB).
+
+### Vulkan runtime (ngbrecomp's xboxrecomp fork)
+
+- `vk/` builds the same lifted code against ngbrecomp's fork: xemu's NV2A
+  model with its Vulkan renderer, one virtual CPU for guest threads, SDL2
+  audio and input. Windows needs llvm-mingw; `scripts/setup_vk.sh`.
+- The fork's checkout has a git symlink (`nv2a_vk/shim/hw/xbox/nv2a ->
+  ../../../xemu`) that a Windows checkout turns into a text file;
+  `vk/CMakeLists.txt` makes a junction in the build tree instead.
+- mingw declares `fpclass` and `_abnormal_termination`; Ghidra's FidDb gave
+  two lifted functions those names. `config/name_denylist.txt` turns them
+  back into `sub_` names.
+- DirectSound's GP DSP doorbell: the fork has only fixed addresses.
+  `patches/ngbrecomp-0001` backports upstream's `RECOMP_APU_DSP_ACK=auto`
+  (doorbell = GPSADDR SGE[0] + 0x810), on by default in `main_vk.c`.
+- Four more functions seeded (0x0003F990, 0x00073A20, 0x000FAB60,
+  0x00107690): level0 code reached by ICALL, which crashed the first
+  Vulkan-speed load.
+- Result: 60 fps menus and movies, ~40 fps in the Warner lot, level0 loads
+  in well under a minute (vs ~12 min on the CPU rasteriser). The font-atlas
+  flash on the Continue Game dialog does not happen here.
+- CPU-executor shims in `recomp_manual.c` (semaphore registration, the
+  BlockOnTime "close" answer) are compiled out under `ANI_NV2A_VK`: the
+  NV2A model writes the semaphore and raises the interrupts itself.

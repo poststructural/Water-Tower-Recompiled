@@ -7,6 +7,10 @@
 #
 # Usage (Git Bash on Windows, or bash on Linux/macOS):
 #   XBE=game/default.xbe scripts/regen.sh
+#   TK=tools/ngbrecomp/xboxrecomp scripts/regen.sh   # for the Vulkan build (vk/)
+#
+# The generated code belongs to the toolkit that made it: regenerate when
+# switching between the MSVC build (tools/xboxrecomp) and the Vulkan build.
 #
 # Env:
 #   XBE          path to default.xbe (default: game/default.xbe)
@@ -18,7 +22,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TK="$ROOT/tools/xboxrecomp"
+# TK: the toolkit whose pipeline and runtime this build uses.
+TK="${TK:-$ROOT/tools/xboxrecomp}"
 XBE="${XBE:-$ROOT/game/default.xbe}"
 XBE="$(cd "$(dirname "$XBE")" && pwd)/$(basename "$XBE")"
 if command -v python >/dev/null 2>&1; then PY="${PY:-python}"; else PY="${PY:-python3}"; fi
@@ -52,10 +57,16 @@ if [ -f "$GEXPORT" ]; then
 else
     echo "== ghidra naming skipped (set GHIDRA_HOME to run it)"
 fi
+# Recovered names that collide with host C runtime declarations (mingw).
+"$PY" "$ROOT/scripts/apply_name_denylist.py" tools/disasm/output/functions.json \
+    "$ROOT/config/name_denylist.txt"
 echo "== func_id"; "$PY" -m tools.func_id "$XBE"
 echo "== abi";     "$PY" -m tools.abi_analysis "$XBE"
 echo "== recomp"
-rm -f "$ROOT"/src/recomp/gen/recomp_[0-9]*.c
+# recomp_types.h is the register model of the toolkit that generates the code,
+# and the pipeline never overwrites an existing one: remove it so switching TK
+# cannot pair one toolkit's header with the other's runtime.
+rm -f "$ROOT"/src/recomp/gen/recomp_[0-9]*.c "$ROOT/src/recomp/gen/recomp_types.h"
 "$PY" -m tools.recomp "$XBE" --all --split 250 \
     --game-name "Animaniacs: The Great Edgar Hunt" \
     --exclude-manual "$ROOT/src/recomp_manual.c" \

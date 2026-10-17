@@ -10,9 +10,20 @@ back end.
 
 ## Status
 
-Early bring-up. The full pipeline runs and the lifted C compiles into
-`animaniacs_recomp.exe`; booting it is the work in progress. See
-[docs/NOTES.md](docs/NOTES.md) for findings and the bring-up log.
+Boots and plays on Windows: splash movies, intro, the 3D frontend, saving
+and loading, and the first level (the Warner lot) with Yakko under control.
+See [docs/NOTES.md](docs/NOTES.md) for the bring-up log.
+
+Two builds of the same recompiled game:
+
+| | MSVC build (`CMakeLists.txt`) | Vulkan build (`vk/`) |
+|---|---|---|
+| Runtime | [xboxrecomp](https://github.com/sp00nznet/xboxrecomp) upstream | [ngbrecomp](https://github.com/gamboozino/ngbrecomp)'s xboxrecomp fork |
+| GPU | CPU pushbuffer rasteriser | xemu's NV2A model on Vulkan |
+| Speed | menus ~7-10 fps, level load ~12 min | 60 fps menus, ~40 fps in level, load under a minute |
+| Compiler | MSVC | llvm-mingw (clang) |
+
+The Vulkan build is the one to play.
 
 ## The game binary
 
@@ -57,13 +68,32 @@ cp -r game build/Release/game     # or a junction/symlink
 build/Release/animaniacs_recomp.exe 2>stderr.txt
 ```
 
+## Building the Vulkan version (Windows)
+
+Needs a GPU with Vulkan 1.3 drivers.
+
+```bash
+scripts/setup_vk.sh                                  # once: fork, patches, llvm-mingw, libraries
+TK=tools/ngbrecomp/xboxrecomp XBE=game/default.xbe scripts/regen.sh
+cmake -S vk -B build-vk -G Ninja \n    -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/windows-llvm-mingw.cmake
+ninja -C build-vk
+# The clang64 DLLs (SDL2, glib, ...) must be on PATH or next to the exe:
+PATH="work/windeps/sysroot/clang64/bin:work/windeps/llvm-mingw-20260922-ucrt-x86_64/x86_64-w64-mingw32/bin:$PATH" \n    build-vk/Animaniacs.exe game
+```
+
+Saves go to `%LOCALAPPDATA%\AnimaniacsRecompiled` (`ANI_SAVE_DIR` overrides).
+
 ## Layout
 
 ```
-src/main.c              host entry: loads the XBE, boots the kernel layer, calls the guest
+src/main.c              host entry (MSVC build): loads the XBE, boots the kernel layer, calls the guest
+src/main_vk.c           host entry (Vulkan build): window, GPU model, virtual CPU
 src/recomp_manual.c     hand-written overrides for lifted functions
 src/recomp/gen/         generated C (not committed; produced by scripts/regen.sh)
 tools/xboxrecomp/       the toolkit (git submodule)
+tools/ngbrecomp/        ngbrecomp, for its xboxrecomp fork (git submodule)
+vk/                     the Vulkan build
+cmake/toolchains/       llvm-mingw toolchain for the Vulkan build
 patches/                local patches applied to the toolkit
 scripts/regen.sh        the full XBE -> C pipeline
 ```

@@ -42,5 +42,21 @@
   {
     "start": "0x00125500",
     "note": ".text callback: address taken as an immediate, follows int3/ret padding, outside every detected function"
+  },
+  {
+    "start": "0x0003F990",
+    "note": "level code, reached by ICALL during level0 load"
+  },
+  {
+    "start": "0x00073A20",
+    "note": "level code, reached by ICALL during level0 load"
+  },
+  {
+    "start": "0x000FAB60",
+    "note": "callback (address taken as immediate at 0x000FE492), reached during level0 load"
+  },
+  {
+    "start": "0x00107690",
+    "note": "after int3 padding outside every detected function (static scan)"
   }
 ]

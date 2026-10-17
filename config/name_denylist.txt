@@ -1,0 +1,5 @@
+# Ghidra/FidDb names that collide with C runtime headers on some hosts
+# (mingw declares both). These functions keep their sub_ names.
+fpclass
+_abnormal_termination
+abnormal_termination
