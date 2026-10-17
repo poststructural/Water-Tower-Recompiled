@@ -20,3 +20,9 @@ stderr.txt
 /game
 /build-vk/
 /src/recomp/gen/recomp_types.h
+
+# Launcher packaging
+/launcher/build/
+/launcher/dist/
+/launcher/*.spec
+__pycache__/
