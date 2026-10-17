@@ -8,7 +8,9 @@ client is compiled into the executable, checks come from hooks on the game's own
 functions, and items are granted by writing game state on the game thread. There is
 no separate client program and no memory-poking sidecar.
 
-**Status: first version, not yet played through.** The client, the world and the
+**Status: first version, not yet played through.** On Austin's PC it builds, and a
+bound session runs New Game into the hub and level 1 at 60 fps; no Edgar has been
+picked up with it yet. The client, the world and the
 protocol are tested against a real Archipelago 0.6.8 server (see Testing). The game
 facts below come from static analysis of `default.xbe`; the ones marked
 *provisional* still need a playthrough to confirm.
@@ -91,7 +93,10 @@ save gets its forgotten checks back.
 | `0x0009F840` GiveAbility | `or [0x00311510], ax`. Callers: the `GiveAbility` script verb (`0x000FC8B0`) and pickup types 0xF/0x12/0x13/0x14 (`0x00028131`) | Shuffled abilities become checks and are not granted |
 | `0x000FD450` GetAllEdgars | Script verb registered at `0x000FF13D`; sums bits 4-7 of each level record, returns 36 under the all-Edgars cheat (`0x00311512 & 0x10`) | Returns the Edgars received |
 
-The two reached through function pointers are also returned from
+A hook that answers in place of the generated body (GetAllEdgars, and
+GiveAbility when every bit is shuffled) pops the return address itself
+(`g_esp += 4`), as the body's `ret` would; the host tests' fake bodies do the same
+and check the stack balances. The two reached through function pointers are also returned from
 `recomp_lookup_manual`, because the dispatch table maps a wrapped function to its
 generated body.
 

@@ -60,36 +60,46 @@ static void guest_init(void)
 static void set_level(int lv) { G32(ANI_G_LEVEL_INDEX) = (uint32_t)(lv + ANI_G_LEVEL_BIAS); }
 static float *edgar_var(void) { return (float *)((uintptr_t)g_xbox_mem_offset + VALUES + 16); }
 
+/* Each fake body ends like a generated one: its ret pops the return address. */
+#define RET() (g_esp += 4)
+
 static void gen_frame(void)
 {
+    RET();
     if (*(uint8_t *)((uintptr_t)g_xbox_mem_offset + ANI_G_EDGAR_PENDING)) {
         *edgar_var() += 1.0f;
         *(uint8_t *)((uintptr_t)g_xbox_mem_offset + ANI_G_EDGAR_PENDING) = 0;
     }
 }
-static void gen_pickup_edgar(void) { *edgar_var() += 1.0f; }
-static void gen_pickup_other(void) {}
+static void gen_pickup_edgar(void) { *edgar_var() += 1.0f; RET(); }
+static void gen_pickup_other(void) { RET(); }
 static void gen_give(void)
 {
     *(uint16_t *)((uintptr_t)g_xbox_mem_offset + ANI_G_ABILITIES) |= (uint16_t)G32(g_esp + 4);
+    RET();
 }
 static void gen_get_all(void)
 {
     GF(G32(G32(g_esp + 8) + 4)) = 99.0f;
+    RET();
 }
 
 static void give(uint16_t bits)
 {
+    g_esp = STACK;
     G32(g_esp + 4) = bits;
     ani_ap_hook_give_ability(gen_give);
+    CHECK(g_esp == STACK + 4);   /* the return address was popped exactly once */
 }
 
 static float get_all_edgars(void)
 {
+    g_esp = STACK;
     G32(g_esp + 8) = 0x00610000u;
     G32(0x00610004u) = 0x00610100u;
     GF(0x00610100u) = -1.0f;
     ani_ap_hook_get_all_edgars(gen_get_all);
+    CHECK(g_esp == STACK + 4);
     return GF(0x00610100u);
 }
 

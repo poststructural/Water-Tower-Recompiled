@@ -569,6 +569,10 @@ bool ani_ap_active(void) { return S.bound; }
 
 /* ── Hooks ─────────────────────────────────────────────────── */
 
+/* A generated body ends with the guest's `ret`, which pops the return address
+ * the caller pushed. A hook that answers in place of the body must pop it
+ * itself, or the caller resumes with esp 4 bytes low. */
+
 static void edgar_found(int level, float count, const char *how)
 {
     int ordinal = (int)(count + 0.5f);
@@ -645,6 +649,8 @@ void ani_ap_hook_give_ability(ani_gen_fn gen)
         G32(arg) = (saved & 0xFFFF0000u) | (uint16_t)(bits & ~taken);
         gen();
         G32(arg) = saved;
+    } else {
+        g_esp += 4;   /* the generated body's ret: pop the return address */
     }
     g_eax = (g_eax & 0xFFFF0000u) | bits;
 }
@@ -659,4 +665,5 @@ void ani_ap_hook_get_all_edgars(ani_gen_fn gen)
     out = G32(args + 4);
     GF(out) = (float)S.edgars;
     g_eax = (g_eax & 0xFFFFFF00u) | 1;
+    g_esp += 4;       /* the generated body's ret: pop the return address */
 }
