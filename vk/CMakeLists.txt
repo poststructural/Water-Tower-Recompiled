@@ -69,12 +69,22 @@ target_link_libraries(ani_gen PRIVATE platform)
 target_compile_options(ani_gen PRIVATE
     -O2 -fno-strict-aliasing -fwrapv -w)
 
+# The in-process Archipelago client (src/ap, docs/ARCHIPELAGO.md).
+set(ANI_AP_SOURCES
+    ${ANI_ROOT}/src/ap/ap_bridge.c
+    ${ANI_ROOT}/src/ap/ap_game.c
+    ${ANI_ROOT}/src/ap/ap_json.c
+    ${ANI_ROOT}/src/ap/ap_net.c
+    ${ANI_ROOT}/src/ap/ap_ws_posix.c
+    ${ANI_ROOT}/src/ap/ap_ws_winhttp.c)
+
 add_executable(${PROJECT_NAME}
     ${ANI_ROOT}/src/main_vk.c
     ${ANI_ROOT}/src/settings.c
     ${ANI_ROOT}/src/recomp_manual.c
+    ${ANI_AP_SOURCES}
     $<TARGET_OBJECTS:ani_gen>)
-target_compile_definitions(${PROJECT_NAME} PRIVATE ANI_NV2A_VK
+target_compile_definitions(${PROJECT_NAME} PRIVATE ANI_NV2A_VK ANI_AP
     ANI_VERSION="${PROJECT_VERSION}")
 target_link_libraries(${PROJECT_NAME} PRIVATE xboxrecomp xbox_nv2a_vk)
 target_include_directories(${PROJECT_NAME} PRIVATE
@@ -90,7 +100,7 @@ if(WIN32)
     option(ANI_GUI "Build without a console window" ON)
     set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME Animaniacs
                           WIN32_EXECUTABLE ${ANI_GUI})
-    target_link_libraries(${PROJECT_NAME} PRIVATE winmm dbghelp)
+    target_link_libraries(${PROJECT_NAME} PRIVATE winmm dbghelp winhttp)
     # A PDB beside the exe: every lifted function is a symbol (sub_XXXXXXXX),
     # so crash reports and scripts/sample_profile.py name guest functions.
     target_link_options(${PROJECT_NAME} PRIVATE -Wl,--pdb=)

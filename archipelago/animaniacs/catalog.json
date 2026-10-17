@@ -1,0 +1,380 @@
+{
+  "game": "Animaniacs: The Great Edgar Hunt",
+  "catalog_version": 1,
+  "base_id": 1095630848,
+  "note": "IDs are permanent once released. Fields marked provisional come from static analysis of default.xbe only and need a playthrough capture (ANI_AP_LOG=1) to confirm; see docs/ARCHIPELAGO.md.",
+  "provisional": [
+    "levels[].name",
+    "levels[].edgars",
+    "levels[].unlock_edgars",
+    "abilities[].level",
+    "levels[].requires"
+  ],
+  "edgar_item": {
+    "id": 1095630849,
+    "name": "Edgar"
+  },
+  "filler_item": {
+    "id": 1095630850,
+    "name": "Applause"
+  },
+  "levels": [
+    {
+      "index": 0,
+      "name": "Warner Lot",
+      "edgars": 6,
+      "unlock_edgars": 0,
+      "requires": [],
+      "edgar_locations": [
+        {
+          "id": 1095634945,
+          "name": "Warner Lot Edgar 1",
+          "ordinal": 1
+        },
+        {
+          "id": 1095634946,
+          "name": "Warner Lot Edgar 2",
+          "ordinal": 2
+        },
+        {
+          "id": 1095634947,
+          "name": "Warner Lot Edgar 3",
+          "ordinal": 3
+        },
+        {
+          "id": 1095634948,
+          "name": "Warner Lot Edgar 4",
+          "ordinal": 4
+        },
+        {
+          "id": 1095634949,
+          "name": "Warner Lot Edgar 5",
+          "ordinal": 5
+        },
+        {
+          "id": 1095634950,
+          "name": "Warner Lot Edgar 6",
+          "ordinal": 6
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "name": "Calamity Canyon",
+      "edgars": 6,
+      "unlock_edgars": 3,
+      "requires": [],
+      "edgar_locations": [
+        {
+          "id": 1095634961,
+          "name": "Calamity Canyon Edgar 1",
+          "ordinal": 1
+        },
+        {
+          "id": 1095634962,
+          "name": "Calamity Canyon Edgar 2",
+          "ordinal": 2
+        },
+        {
+          "id": 1095634963,
+          "name": "Calamity Canyon Edgar 3",
+          "ordinal": 3
+        },
+        {
+          "id": 1095634964,
+          "name": "Calamity Canyon Edgar 4",
+          "ordinal": 4
+        },
+        {
+          "id": 1095634965,
+          "name": "Calamity Canyon Edgar 5",
+          "ordinal": 5
+        },
+        {
+          "id": 1095634966,
+          "name": "Calamity Canyon Edgar 6",
+          "ordinal": 6
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "name": "Spooky Graveyard",
+      "edgars": 6,
+      "unlock_edgars": 9,
+      "requires": [],
+      "edgar_locations": [
+        {
+          "id": 1095634977,
+          "name": "Spooky Graveyard Edgar 1",
+          "ordinal": 1
+        },
+        {
+          "id": 1095634978,
+          "name": "Spooky Graveyard Edgar 2",
+          "ordinal": 2
+        },
+        {
+          "id": 1095634979,
+          "name": "Spooky Graveyard Edgar 3",
+          "ordinal": 3
+        },
+        {
+          "id": 1095634980,
+          "name": "Spooky Graveyard Edgar 4",
+          "ordinal": 4
+        },
+        {
+          "id": 1095634981,
+          "name": "Spooky Graveyard Edgar 5",
+          "ordinal": 5
+        },
+        {
+          "id": 1095634982,
+          "name": "Spooky Graveyard Edgar 6",
+          "ordinal": 6
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "name": "Jungle River",
+      "edgars": 6,
+      "unlock_edgars": 15,
+      "requires": [],
+      "edgar_locations": [
+        {
+          "id": 1095634993,
+          "name": "Jungle River Edgar 1",
+          "ordinal": 1
+        },
+        {
+          "id": 1095634994,
+          "name": "Jungle River Edgar 2",
+          "ordinal": 2
+        },
+        {
+          "id": 1095634995,
+          "name": "Jungle River Edgar 3",
+          "ordinal": 3
+        },
+        {
+          "id": 1095634996,
+          "name": "Jungle River Edgar 4",
+          "ordinal": 4
+        },
+        {
+          "id": 1095634997,
+          "name": "Jungle River Edgar 5",
+          "ordinal": 5
+        },
+        {
+          "id": 1095634998,
+          "name": "Jungle River Edgar 6",
+          "ordinal": 6
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "name": "Waterfall Canyon",
+      "edgars": 6,
+      "unlock_edgars": 21,
+      "requires": [],
+      "edgar_locations": [
+        {
+          "id": 1095635009,
+          "name": "Waterfall Canyon Edgar 1",
+          "ordinal": 1
+        },
+        {
+          "id": 1095635010,
+          "name": "Waterfall Canyon Edgar 2",
+          "ordinal": 2
+        },
+        {
+          "id": 1095635011,
+          "name": "Waterfall Canyon Edgar 3",
+          "ordinal": 3
+        },
+        {
+          "id": 1095635012,
+          "name": "Waterfall Canyon Edgar 4",
+          "ordinal": 4
+        },
+        {
+          "id": 1095635013,
+          "name": "Waterfall Canyon Edgar 5",
+          "ordinal": 5
+        },
+        {
+          "id": 1095635014,
+          "name": "Waterfall Canyon Edgar 6",
+          "ordinal": 6
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "name": "The Ship",
+      "edgars": 6,
+      "unlock_edgars": 27,
+      "requires": [],
+      "edgar_locations": [
+        {
+          "id": 1095635025,
+          "name": "The Ship Edgar 1",
+          "ordinal": 1
+        },
+        {
+          "id": 1095635026,
+          "name": "The Ship Edgar 2",
+          "ordinal": 2
+        },
+        {
+          "id": 1095635027,
+          "name": "The Ship Edgar 3",
+          "ordinal": 3
+        },
+        {
+          "id": 1095635028,
+          "name": "The Ship Edgar 4",
+          "ordinal": 4
+        },
+        {
+          "id": 1095635029,
+          "name": "The Ship Edgar 5",
+          "ordinal": 5
+        },
+        {
+          "id": 1095635030,
+          "name": "The Ship Edgar 6",
+          "ordinal": 6
+        }
+      ]
+    }
+  ],
+  "abilities": [
+    {
+      "bit": 1,
+      "key": "bomb",
+      "name": "Bomb",
+      "item": 1095631104,
+      "location": {
+        "id": 1095639040,
+        "name": "Bomb Pickup"
+      },
+      "level": 1
+    },
+    {
+      "bit": 2,
+      "key": "shovel",
+      "name": "Shovel",
+      "item": 1095631105,
+      "location": {
+        "id": 1095639041,
+        "name": "Shovel Pickup"
+      },
+      "level": 1
+    },
+    {
+      "bit": 4,
+      "key": "skirt",
+      "name": "Limbo Skirt",
+      "item": 1095631106,
+      "location": {
+        "id": 1095639042,
+        "name": "Limbo Skirt Pickup"
+      },
+      "level": 2
+    },
+    {
+      "bit": 8,
+      "key": "magnifyglass",
+      "name": "Magnifying Glass",
+      "item": 1095631107,
+      "location": {
+        "id": 1095639043,
+        "name": "Magnifying Glass Pickup"
+      },
+      "level": 2
+    },
+    {
+      "bit": 16,
+      "key": "wakko",
+      "name": "Wakko",
+      "item": 1095631108,
+      "location": {
+        "id": 1095639044,
+        "name": "Wakko Pickup"
+      },
+      "level": 0
+    },
+    {
+      "bit": 32,
+      "key": "dot",
+      "name": "Dot",
+      "item": 1095631109,
+      "location": {
+        "id": 1095639045,
+        "name": "Dot Pickup"
+      },
+      "level": 0
+    },
+    {
+      "bit": 64,
+      "key": "longattack",
+      "name": "Long Shot",
+      "item": 1095631110,
+      "location": {
+        "id": 1095639046,
+        "name": "Long Shot Pickup"
+      },
+      "level": 3
+    },
+    {
+      "bit": 128,
+      "key": "snorkel",
+      "name": "Snorkel",
+      "item": 1095631111,
+      "location": {
+        "id": 1095639047,
+        "name": "Snorkel Pickup"
+      },
+      "level": 3
+    },
+    {
+      "bit": 256,
+      "key": "suckers",
+      "name": "Suction Cups",
+      "item": 1095631112,
+      "location": {
+        "id": 1095639048,
+        "name": "Suction Cups Pickup"
+      },
+      "level": 4
+    },
+    {
+      "bit": 512,
+      "key": "goggles",
+      "name": "Night Goggles",
+      "item": 1095631113,
+      "location": {
+        "id": 1095639049,
+        "name": "Night Goggles Pickup"
+      },
+      "level": 4
+    },
+    {
+      "bit": 1024,
+      "key": "redstardoor",
+      "name": "Red Star Door",
+      "item": 1095631114,
+      "location": {
+        "id": 1095639050,
+        "name": "Red Star Door Pickup"
+      },
+      "level": 5
+    }
+  ]
+}

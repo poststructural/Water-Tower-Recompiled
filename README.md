@@ -113,12 +113,23 @@ and keyboard keys are in [docs/CONTROLS.md](docs/CONTROLS.md).
 Test switches: `ANI_LEVEL=N` (1-5) loads level N instead of the hub;
 `RECOMP_AUDIO_WAV=out.wav` records the audio output.
 
+## Archipelago randomizer (experimental)
+
+The Vulkan build has an [Archipelago](https://archipelago.gg) client built in:
+Edgars you pick up are checks, and the Edgars you receive open the movie sets.
+`python scripts/build_apworld.py` builds `animaniacs.apworld`; run the game with
+`--ap-server HOST:PORT --ap-slot NAME`. After pulling this, re-run `scripts/regen.sh`
+(the hooks wrap four more lifted functions). See [docs/ARCHIPELAGO.md](docs/ARCHIPELAGO.md).
+
 ## Layout
 
 ```
 src/main.c              host entry (MSVC build): loads the XBE, boots the kernel layer, calls the guest
 src/main_vk.c           host entry (Vulkan build): window, GPU model, virtual CPU
 src/recomp_manual.c     hand-written overrides for lifted functions
+src/ap/                 the in-process Archipelago client
+archipelago/animaniacs/ the Archipelago world (catalog.json holds every ID)
+tests/ap/               host tests for the client, incl. a live-server run
 src/recomp/gen/         generated C (not committed; produced by scripts/regen.sh)
 tools/xboxrecomp/       the toolkit (git submodule)
 tools/ngbrecomp/        ngbrecomp, for its xboxrecomp fork (git submodule)
