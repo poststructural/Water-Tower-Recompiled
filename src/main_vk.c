@@ -343,13 +343,14 @@ int main(int argc, char **argv)
     printf("Game directory: %s\n", s_game_dir);
 
     {
-        extern int ani_skip_intro;   /* recomp_manual.c */
+        extern int ani_skip_intro, ani_widescreen;   /* recomp_manual.c */
         char exe[4096], save[4096];
         exe_dir(exe, sizeof exe);
         save_dir_path(save, sizeof save);
         ani_mkdirs(save);
         ani_settings_load(&s_settings, exe, save);
         ani_skip_intro = s_settings.skip_intro;
+        ani_widescreen = s_settings.widescreen;
         printf("Settings: %s\n", s_settings.path);
     }
 
@@ -362,7 +363,8 @@ int main(int argc, char **argv)
     if (!s_headless) {
         if (nv2a_window_create("Animaniacs: The Great Edgar Hunt",
                                s_settings.width, s_settings.height,
-                               s_settings.fullscreen, 4.0 / 3.0,
+                               s_settings.fullscreen,
+                               s_settings.widescreen ? 16.0 / 9.0 : 4.0 / 3.0,
                                s_settings.vsync) != 0) {
             fprintf(stderr, "Cannot open the game window.\n");
             return 1;

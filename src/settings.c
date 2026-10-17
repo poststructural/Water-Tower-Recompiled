@@ -65,6 +65,7 @@ static void apply(AniSettings *s, const char *section, const char *key,
         else if (!strcmp(key, "height") && v >= 240) s->height = v;
         else if (!strcmp(key, "fullscreen"))         s->fullscreen = v;
         else if (!strcmp(key, "vsync"))              s->vsync = v;
+        else if (!strcmp(key, "widescreen"))         s->widescreen = v;
         else if (!strcmp(key, "show_fps") && v)      set_default("NV2A_SHOW_FPS", "1");
     } else if (!strcmp(section, "graphics")) {
         if (!strcmp(key, "render_scale") && v >= 1 && v <= 4)
@@ -100,6 +101,7 @@ void ani_settings_load(AniSettings *s, const char *exe_dir, const char *save_dir
     s->fullscreen = 0;
     s->vsync = 1;
     s->skip_intro = 0;
+    s->widescreen = 0;
     set_default("NV2A_SCALE", "2");
 
     snprintf(path, sizeof path, "%ssettings.ini", exe_dir);

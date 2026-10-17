@@ -242,6 +242,69 @@ void sub_000ECF20(void)
     sub_000ECF20_gen();
 }
 
+int ani_widescreen;
+
+/* Camera projection scales (0x0005CC80, every frame from the render path):
+ * calls sub_00063F30(camera, k * [0x002EEC50], k * [0x002EECA8]) -- the
+ * horizontal and vertical scale factors (cot of the half-angles). The camera
+ * modes keep the vertical one 4/3 of the horizontal (the fmul by 4/3 at
+ * 0x0005C84F; pairs such as 2.4 / 3.2), which is a 4:3 view. For widescreen
+ * the horizontal scale becomes 9/16 of the vertical for this call only: the
+ * same vertical view, a wider horizontal one (Hor+), which the presenter
+ * stretches to 16:9. */
+#define ANI_PROJ_X 0x002EEC50u
+#define ANI_PROJ_Y 0x002EECA8u
+
+extern void sub_0005CC80_gen(void);
+void sub_0005CC80(void)
+{
+    volatile float *x = (volatile float *)((uintptr_t)g_xbox_mem_offset + ANI_PROJ_X);
+    volatile float *y = (volatile float *)((uintptr_t)g_xbox_mem_offset + ANI_PROJ_Y);
+    float saved = *x;
+
+    if (ani_widescreen && saved > 0.0f) {
+        float r = *y / saved;
+        if (r > 1.30f && r < 1.37f)
+            *x = *y * (9.0f / 16.0f);
+    }
+    sub_0005CC80_gen();
+    *x = saved;
+}
+
+/* Projection setup (0x00084110, cdecl: fov, aspect, near, far, viewport...).
+ * Every camera goes through it -- the gameplay camera (sub_000843B0) and the
+ * cutscene cameras alike -- with aspect 4:3 (0x3FAAAAAB). With widescreen on
+ * (settings.ini), a 4:3 aspect becomes 16:9: the game renders a wider view
+ * into the same framebuffer, and the presenter stretches it to 16:9
+ * (anamorphic, like a widescreen TV). Other aspects -- render-to-texture
+ * cameras -- are left alone. */
+
+extern void sub_00084110_gen(void);
+void sub_00084110(void)
+{
+    if (ani_widescreen) {
+        volatile float *aspect = (volatile float *)
+            ((uintptr_t)g_xbox_mem_offset + (uint32_t)(g_esp + 8));
+        float a = *aspect;
+        if (getenv("ANI_WS_LOG")) {
+            static int n;
+            if (n++ < 20)
+                fprintf(stderr, "[ANI] projection: fov %f aspect %f\n",
+                        *(volatile float *)((uintptr_t)g_xbox_mem_offset +
+                                            (uint32_t)(g_esp + 4)), a);
+        }
+        if (a > 1.33f && a < 1.34f) {
+            *aspect = 16.0f / 9.0f;
+            sub_00084110_gen();
+            /* cdecl: the caller pops the arguments, so restore what it passed. */
+            *(volatile float *)((uintptr_t)g_xbox_mem_offset +
+                                (uint32_t)(g_esp + 4)) = a;
+            return;
+        }
+    }
+    sub_00084110_gen();
+}
+
 recomp_func_t recomp_lookup_manual(uint32_t xbox_va)
 {
     /*

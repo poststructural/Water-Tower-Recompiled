@@ -7,6 +7,7 @@ typedef struct AniSettings {
     int fullscreen;     /* 0 window, 1 fullscreen, 2 borderless */
     int vsync;          /* 0 off, 1 on, 2 adaptive */
     int skip_intro;
+    int widescreen;     /* 16:9 view, stretched (anamorphic) */
     char path[4200];    /* where the file was read from */
 } AniSettings;
 
