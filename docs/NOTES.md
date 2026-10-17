@@ -42,3 +42,48 @@ style startup code; these become stubs and only matter if reached.
   64-bit JDK 21 as its Java; on this machine it currently resolves the
   32-bit Java 8 runtime, so rea's Ghidra-backed tools are unavailable until
   its environment is configured.
+
+## Bring-up log
+
+### 2026-10-17
+
+1. **Device creation hung** in D3D_BlockOnTime (`0x0014FA40`), spinning at
+   `0x0014FB77` on the GPU semaphore at `*(device+0x30)`; device pointer at
+   `0x0015A388`. Fix: `recomp_manual.c` wraps it and hands the semaphore to
+   the pushbuffer executor (`nv2a_pb_set_semaphore_target`). Needs
+   `RECOMP_PB_EXEC=1`. Result: Ignition splash plays at ~57 fps through the
+   game's own lifted XMV decoder.
+2. **Stuck after the first movie**: no controller. `main.c` now calls
+   `xbox_OhciInit()`; run with `RECOMP_USB=1`. XAPI enumerates the pad.
+3. **Missed functions** reached by indirect calls: XPP USB callbacks after
+   `ret` with no padding, and `.text` callbacks whose address is taken as an
+   immediate (one was the save-name screen's, failing 11k times). Listed in
+   `config/seed_functions.json`.
+4. Result: all splash movies, intro, 3D frontend, New Game, name entry,
+   save write ("Game saved successfully"), Continue Game listing saves, and
+   the level0 (Warner lot) loading screen.
+
+### Open issues
+
+- **Level load crawls** (~200 KB/s of `level0.hog`, 64 KB sequential reads).
+  The game's render thread spends ~90% of its time in KickOff
+  (`sub_0014F860`) spinning on the PFB write-combine flush bit
+  (0x100410 bit 16), which the runtime only clears between commands of the
+  pushbuffer walk -- and the walker is also the CPU rasteriser. Loader
+  workers wait on events behind it. Answering the flush instantly from a
+  host thread deadlocked D3D's fence wait (GET == PUT but the semaphore
+  never reached the fence), so that was reverted. The real fix is likely a
+  hardware render back end (`nv2a_backend.h`) so the walk stops being
+  rasteriser-bound.
+- The Continue Game confirm dialog draws the whole font atlas full-screen
+  for a frame or two (executor bug, probably a quad's UVs/coords).
+
+## Driving a run without a pad
+
+```
+RECOMP_USB=1 RECOMP_PAD_LIVE=live.txt RECOMP_FB_DUMP=frames/f RECOMP_PB_REPORT_MS=1500 RECOMP_PB_EXEC=1 RECOMP_VBLANK=1 RECOMP_AC97_READY=1     build/Release/animaniacs_recomp.exe 2>stderr.txt
+echo start >> live.txt     # each appended line is a press: a, b, up, start ...
+```
+
+`scripts/sample_profile.py` and `scripts/thread_stacks.py` sample a live run
+by symbol (the Release build now writes a PDB).

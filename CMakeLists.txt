@@ -115,3 +115,11 @@ endif()
 #     ENABLE_ICALL_TRACE=1
 #     VERBOSE_KERNEL_LOG=1
 # )
+
+# Symbols for the Release build: generated functions are named after the guest
+# functions they lift, so the PDB turns a native crash address or a profiler
+# sample into a guest function (see scripts/sample_profile.py).
+if(MSVC)
+    target_compile_options(${PROJECT_NAME} PRIVATE /Zi)
+    target_link_options(${PROJECT_NAME} PRIVATE /DEBUG /OPT:REF /OPT:ICF)
+endif()

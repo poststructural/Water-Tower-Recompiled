@@ -371,6 +371,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         xbox_OhciInit();
     }
 
+    /* 1 ms timer resolution. The Xbox kernel's Sleep(1) is a millisecond; the
+     * Windows default tick is 15.6 ms, so every short guest delay -- the level
+     * loader yields between reads -- runs an order of magnitude long. */
+    {
+        extern __declspec(dllimport) unsigned int __stdcall timeBeginPeriod(unsigned int);
+        timeBeginPeriod(1);
+    }
+
     /* Step 6: Initialize stack */
     g_esp = XBOX_STACK_TOP;
 
