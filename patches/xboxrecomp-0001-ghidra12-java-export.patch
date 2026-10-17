@@ -1,0 +1,147 @@
+diff --git a/tools/ghidra_naming/ghidra_scripts/ExportXbeNames.java b/tools/ghidra_naming/ghidra_scripts/ExportXbeNames.java
+new file mode 100644
+index 0000000..0cb242c
+--- /dev/null
++++ b/tools/ghidra_naming/ghidra_scripts/ExportXbeNames.java
+@@ -0,0 +1,110 @@
++// Export Xbox XBE analysis from Ghidra (headless post-script), Java port of
++// ExportXbeNames.py for Ghidra 12+, which no longer ships Jython.
++//
++// Writes functions.json and symbols.json into the output directory, in the
++// same shape the Jython script produces, so merge_names.py reads either.
++// Decompilation is not ported; use the Jython script with the Jython
++// extension installed if you need decompiled.json.
++//
++// Script args (positional): outDir [nodecompile|decompile] [limit] [timeout]
++// Only outDir is used.
++//
++// @category XboxRecomp
++
++import java.io.*;
++import java.nio.charset.StandardCharsets;
++import ghidra.app.script.GhidraScript;
++import ghidra.program.model.address.Address;
++import ghidra.program.model.listing.*;
++import ghidra.program.model.symbol.*;
++
++public class ExportXbeNames extends GhidraScript {
++
++    private static String hex(Address a) {
++        return String.format("0x%08X", a.getOffset());
++    }
++
++    private static String esc(String s) {
++        if (s == null) return "";
++        StringBuilder b = new StringBuilder();
++        for (char c : s.toCharArray()) {
++            switch (c) {
++                case '"': b.append("\\\""); break;
++                case '\\': b.append("\\\\"); break;
++                case '\n': b.append("\\n"); break;
++                case '\r': b.append("\\r"); break;
++                case '\t': b.append("\\t"); break;
++                default:
++                    if (c < 0x20) b.append(String.format("\\u%04x", (int) c));
++                    else b.append(c);
++            }
++        }
++        return b.toString();
++    }
++
++    private static String ns(Namespace n) {
++        if (n == null) return "";
++        String name = n.getName(true);
++        return (name == null || name.equals("Global")) ? "" : name;
++    }
++
++    @Override
++    protected void run() throws Exception {
++        String[] args = getScriptArgs();
++        String outDir = args.length >= 1 && !args[0].isEmpty()
++            ? args[0] : new File("ghidra_export").getAbsolutePath();
++        new File(outDir).mkdirs();
++        println("=== ExportXbeNames (Java) ===");
++        println("Out dir: " + outDir);
++
++        int count = 0;
++        try (Writer w = new BufferedWriter(new OutputStreamWriter(
++                new FileOutputStream(new File(outDir, "functions.json")),
++                StandardCharsets.UTF_8))) {
++            w.write("[\n");
++            boolean first = true;
++            for (Function f : currentProgram.getFunctionManager().getFunctions(true)) {
++                String sig;
++                try { sig = f.getPrototypeString(false, false); }
++                catch (Exception e) { sig = ""; }
++                String cc = f.getCallingConventionName();
++                if (!first) w.write(",\n");
++                first = false;
++                w.write(String.format(
++                    " {\"address\": \"%s\", \"name\": \"%s\", \"signature\": \"%s\", "
++                    + "\"calling_convention\": \"%s\", \"param_count\": %d, "
++                    + "\"is_thunk\": %s, \"namespace\": \"%s\"}",
++                    hex(f.getEntryPoint()), esc(f.getName()), esc(sig),
++                    esc(cc == null ? "" : cc), f.getParameterCount(),
++                    f.isThunk() ? "true" : "false", esc(ns(f.getParentNamespace()))));
++                count++;
++            }
++            w.write("\n]\n");
++        }
++        println("Exported " + count + " functions");
++
++        count = 0;
++        try (Writer w = new BufferedWriter(new OutputStreamWriter(
++                new FileOutputStream(new File(outDir, "symbols.json")),
++                StandardCharsets.UTF_8))) {
++            w.write("[\n");
++            boolean first = true;
++            for (Symbol s : currentProgram.getSymbolTable().getAllSymbols(true)) {
++                Address a = s.getAddress();
++                if (a == null) continue;
++                if (!first) w.write(",\n");
++                first = false;
++                w.write(String.format(
++                    " {\"address\": \"%s\", \"name\": \"%s\", \"type\": \"%s\", "
++                    + "\"namespace\": \"%s\", \"source\": \"%s\", \"primary\": %s}",
++                    hex(a), esc(s.getName()), esc(String.valueOf(s.getSymbolType())),
++                    esc(ns(s.getParentNamespace())), esc(String.valueOf(s.getSource())),
++                    s.isPrimary() ? "true" : "false"));
++                count++;
++            }
++            w.write("\n]\n");
++        }
++        println("Exported " + count + " symbols");
++        println("=== Export complete ===");
++    }
++}
+diff --git a/tools/ghidra_naming/run_ghidra.sh b/tools/ghidra_naming/run_ghidra.sh
+index 93925f8..c65a33e 100644
+--- a/tools/ghidra_naming/run_ghidra.sh
++++ b/tools/ghidra_naming/run_ghidra.sh
+@@ -98,6 +98,8 @@ W_EXPORT_DIR="$(to_win "$EXPORT_DIR")"
+ W_FLAT="$(to_win "$FLAT")"
+ W_SCRIPT_DIR="$(to_win "$SCRIPT_DIR")"
+ 
++# Ghidra 12 ships no Jython, so the Java port is the default export script.
++EXPORT_SCRIPT="${EXPORT_SCRIPT:-ExportXbeNames.java}"
+ IMPORT="${IMPORT:-1}"
+ ANALYZE="${ANALYZE:-1}"
+ 
+@@ -123,7 +125,7 @@ if [ "$IMPORT" = "1" ]; then
+     "${ANALYSIS_PROPS[@]}" \
+     -scriptPath "$W_SCRIPT_DIR" \
+     -preScript SetAnalysisOptions.java \
+-    -postScript ExportXbeNames.py "$W_EXPORT_DIR" "$DO_DECOMPILE" "$DECOMP_LIMIT" "$DECOMP_TIMEOUT"
++    -postScript "$EXPORT_SCRIPT" "$W_EXPORT_DIR" "$DO_DECOMPILE" "$DECOMP_LIMIT" "$DECOMP_TIMEOUT"
+ else
+   echo "[2/3] Re-opening existing program + exporting (no re-import) ..."
+   # -process opens the already-imported program. Add -noanalysis to skip
+@@ -136,7 +138,7 @@ else
+     -process "$PROG_NAME" \
+     "${NOANALYZE_FLAG[@]}" \
+     -scriptPath "$W_SCRIPT_DIR" \
+-    -postScript ExportXbeNames.py "$W_EXPORT_DIR" "$DO_DECOMPILE" "$DECOMP_LIMIT" "$DECOMP_TIMEOUT"
++    -postScript "$EXPORT_SCRIPT" "$W_EXPORT_DIR" "$DO_DECOMPILE" "$DECOMP_LIMIT" "$DECOMP_TIMEOUT"
+ fi
+ 
+ echo "=============================================================="

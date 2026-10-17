@@ -1,0 +1,19 @@
+# Game files: never commit. Bring your own copy.
+/game/
+/Animaniacs*/
+*.xbe
+*.hog
+*.xmv
+tkaXBoxDSPImage.bin
+*_analysis.json
+
+# Generated from the game binary (regenerate with scripts/regen.sh)
+/src/recomp/gen/*.c
+/src/recomp/gen/recomp_funcs.h
+
+# Build and scratch
+/build/
+/work/
+/tools/*.log
+*.log
+stderr.txt
