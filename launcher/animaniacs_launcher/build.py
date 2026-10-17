@@ -31,6 +31,7 @@ from . import REPO, config
 PY_TOOLS = ("capstone", "cmake", "ninja", "pkgconf")
 TK = "tools/ngbrecomp/xboxrecomp"
 EXE = "Animaniacs.exe" if sys.platform == "win32" else "Animaniacs"
+SETTINGS_INI = "settings.ini"
 
 Log = Callable[[str], None]
 
@@ -324,6 +325,8 @@ def build(version, game_dir: str, settings: config.Settings, log: Log,
     pc = pkgconf_exe()
     if pc:
         cfg.append(f"-DPKG_CONFIG_EXECUTABLE={_fwd(pc)}")
+    # vk/CMakeLists.txt copies the exe's DLLs beside it with a Python script.
+    cfg.append(f"-DPython3_EXECUTABLE={_fwd(venv_python())}")
     r.run(cfg, cwd=src, env=env)
     r.run([venv_tool("ninja"), "-C", "build-vk"], cwd=src, env=env)
 
@@ -331,12 +334,24 @@ def build(version, game_dir: str, settings: config.Settings, log: Log,
     exe = os.path.join(bdir, EXE)
     if not os.path.isfile(exe):
         raise BuildError(f"the build finished without producing {EXE}")
-    dest = install(version, bdir)
+    dest = install(version, bdir, carry_from=settings.current_build)
     log(f"== Built {version.name} in {int(time.time() - started) // 60} min")
     return dest
 
 
-def install(version, bdir: str) -> str:
+def carry_settings(from_build: str, to_dir: str) -> None:
+    """Copy the player's settings.ini (the game writes it beside the exe)
+    from an installed build into another build's folder."""
+    if not from_build:
+        return
+    ini = config.sub("builds", from_build, SETTINGS_INI)
+    if os.path.isfile(ini) and os.path.abspath(os.path.dirname(ini)) != os.path.abspath(to_dir):
+        shutil.copy2(ini, os.path.join(to_dir, SETTINGS_INI))
+
+
+def install(version, bdir: str, carry_from: str = "") -> str:
+    """Copy a finished build into builds/<version>, keeping the player's
+    settings.ini from the build they were playing (carry_from)."""
     dest = config.sub("builds", version.name)
     tmp = dest + ".partial"
     shutil.rmtree(tmp, ignore_errors=True)
@@ -344,6 +359,7 @@ def install(version, bdir: str) -> str:
     for n in os.listdir(bdir):
         if n == EXE or n.lower().endswith((".pdb", ".dll")):
             shutil.copy2(os.path.join(bdir, n), tmp)
+    carry_settings(carry_from, tmp)
     with open(os.path.join(tmp, "build.json"), "w", encoding="utf-8") as f:
         json.dump({"name": version.name, "sha": version.sha, "channel": version.channel,
                    "built": time.strftime("%Y-%m-%d %H:%M"), "dll_dirs": dll_dirs()}, f, indent=2)

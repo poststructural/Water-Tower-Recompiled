@@ -452,6 +452,7 @@ class SettingsDialog:
             self.vars["custom_exe"].set(p)
 
     def _switch(self, name: str) -> None:
+        build.carry_settings(self.app.st.current_build, config.sub("builds", name))
         self.app.st.current_build = name
         self.app.st.save()
         self.app.refresh()

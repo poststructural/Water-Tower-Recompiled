@@ -24,7 +24,9 @@ python launcher/run_launcher.py --help     # the same steps from the command lin
    reuse them and rebuild incrementally.
 3. **Updates.** "Releases" follows the newest GitHub release (and follows
    `main` until the repository has one); "Latest main" follows every commit.
-   The last build is kept so you can switch back in Settings.
+   The last build is kept so you can switch back in Settings. Your
+   `settings.ini` (window, fullscreen, render scale, skip intros) moves with
+   you to each new build.
 4. **Play.** Starts the current build on your game files and keeps its log in
    `logs/`. Saves stay in `%LOCALAPPDATA%\AnimaniacsRecompiled`.
 

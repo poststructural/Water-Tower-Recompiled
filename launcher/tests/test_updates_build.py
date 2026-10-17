@@ -86,3 +86,21 @@ def test_cli_setup_and_check(tmp_path, capsys):
     assert st.game_dir == config.sub("game")
     cli.main(["check"])
     assert "Animaniacs (EU)" in capsys.readouterr().out
+
+
+def test_update_keeps_settings_ini(tmp_path):
+    bdir = tmp_path / "build-vk"
+    bdir.mkdir()
+    (bdir / build.EXE).write_bytes(b"MZ")
+    (bdir / "SDL2.dll").write_bytes(b"dll")
+    (bdir / "settings.ini").write_text("fullscreen=0\n")  # the dev's own, never shipped
+    old = build.install(updates.GameVersion("v1", "x", "y", "release"), str(bdir))
+    assert not os.path.exists(os.path.join(old, "settings.ini"))
+    with open(os.path.join(old, "settings.ini"), "w") as f:
+        f.write("fullscreen=1\n")  # the game wrote the player's choice
+    new = build.install(updates.GameVersion("v2", "x", "y", "release"), str(bdir), carry_from="v1")
+    assert open(os.path.join(new, "settings.ini")).read() == "fullscreen=1\n"
+    assert os.path.isfile(os.path.join(new, "SDL2.dll"))
+    # Rebuilding the current build keeps it too.
+    again = build.install(updates.GameVersion("v2", "x", "y", "release"), str(bdir), carry_from="v2")
+    assert open(os.path.join(again, "settings.ini")).read() == "fullscreen=1\n"
