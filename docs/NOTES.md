@@ -78,6 +78,18 @@ style startup code; these become stubs and only matter if reached.
   (it reads 0), so that wait never ends. The real fix is likely a
   hardware render back end (`nv2a_backend.h`) so the walk stops being
   rasteriser-bound.
+- **BlockOnTime's wake-me path** (fence 0x2000+ bytes ahead of the GPU)
+  sleeps on the event at device+0x1DCC, signalled by a GPU software-method
+  interrupt nothing raises; KeWaitForSingleObject on it fails at once and
+  the title spun at 0x0014FB94 (seen in gi1.xmv under `RECOMP_PB_WALK=dma`).
+  `recomp_manual.c` now makes 0x0014F4C0 report "close", so BlockOnTime
+  always uses its semaphore spin. Proper fix: raise the interrupt from the
+  executor on the software method.
+- **Frame rate is rasteriser-bound**: ~57-65 fps for movies, ~7-10 fps for
+  the 3D frontend and the loading screen. The loader is paced by frames, so
+  level0 streams at ~200 KB/s in every mode tried (scan or dma walk, with or
+  without `ANI_FAST_FLUSH`). A hardware back end (`nv2a_backend.h`) is the
+  fix for both.
 - The Continue Game confirm dialog draws the whole font atlas full-screen
   for a frame or two (executor bug, probably a quad's UVs/coords).
 

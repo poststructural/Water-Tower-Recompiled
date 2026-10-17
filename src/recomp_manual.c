@@ -47,7 +47,14 @@ typedef void (*recomp_func_t)(void);
 
 /* ── Register state (defined in xbox_memory_layout.c) ──────── */
 
-extern uint32_t g_eax;
+/* Thread-local in the runtime (RECOMP_TLS). A plain extern binds to the TLS
+ * template, not the calling thread's register, so writes would be lost. */
+#if defined(_MSC_VER)
+#  define ANI_TLS __declspec(thread)
+#else
+#  define ANI_TLS _Thread_local
+#endif
+extern ANI_TLS uint32_t g_eax;
 extern ptrdiff_t g_xbox_mem_offset;
 
 /* ── Manual function overrides ─────────────────────────────── */
@@ -152,6 +159,21 @@ void sub_0014F830(void)
     InterlockedIncrement(&g_ani_sync_flush);
     sub_0014F830_gen();
     InterlockedDecrement(&g_ani_sync_flush);
+}
+
+/* BlockOnTime's "how far is the GPU from this fence" (0x0014F4C0), its only
+ * caller. At 0x2000 bytes or more BlockOnTime patches a "wake me" software
+ * method into the ring and sleeps on the event at device+0x1DCC, which the
+ * GPU's software-method interrupt signals through D3D's ISR. Nothing raises
+ * that interrupt here, and KeWaitForSingleObject on the event fails at once,
+ * so the title spun at 0x0014FB94 for ever (first seen in the gi1.xmv intro
+ * under RECOMP_PB_WALK=dma). Reporting "close" sends BlockOnTime to its
+ * semaphore spin at 0x0014FB77 instead, which the executor does satisfy. */
+extern void sub_0014F4C0_gen(void);
+void sub_0014F4C0(void)
+{
+    sub_0014F4C0_gen();
+    g_eax = 0;
 }
 
 recomp_func_t recomp_lookup_manual(uint32_t xbox_va)
