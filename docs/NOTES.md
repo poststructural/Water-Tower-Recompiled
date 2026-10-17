@@ -81,7 +81,9 @@ style startup code; these become stubs and only matter if reached.
 ## Driving a run without a pad
 
 ```
-RECOMP_USB=1 RECOMP_PAD_LIVE=live.txt RECOMP_FB_DUMP=frames/f RECOMP_PB_REPORT_MS=1500 RECOMP_PB_EXEC=1 RECOMP_VBLANK=1 RECOMP_AC97_READY=1     build/Release/animaniacs_recomp.exe 2>stderr.txt
+RECOMP_USB=1 RECOMP_PAD_LIVE=live.txt RECOMP_FB_DUMP=frames/f \
+RECOMP_PB_REPORT_MS=1500 RECOMP_PB_EXEC=1 RECOMP_VBLANK=1 RECOMP_AC97_READY=1 \
+    build/Release/animaniacs_recomp.exe 2>stderr.txt
 echo start >> live.txt     # each appended line is a press: a, b, up, start ...
 ```
 
