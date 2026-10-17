@@ -363,6 +363,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     printf("Initializing kernel bridge...\n");
     xbox_kernel_bridge_init();
 
+    /* USB host controllers. XAPI is statically linked and drives the OHCI
+     * registers itself, so without this model the title finds no controller
+     * and enumerates no pads. A no-op unless RECOMP_USB is set. */
+    {
+        extern void xbox_OhciInit(void);
+        xbox_OhciInit();
+    }
+
     /* Step 6: Initialize stack */
     g_esp = XBOX_STACK_TOP;
 

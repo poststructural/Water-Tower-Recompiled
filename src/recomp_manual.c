@@ -85,6 +85,43 @@ extern ptrdiff_t g_xbox_mem_offset;
  *       g_eax = result;
  *   }
  */
+/* ── Animaniacs: The Great Edgar Hunt ──────────────────────── */
+
+/* Guest dword at an Xbox VA. */
+#define GUEST32(va) (*(volatile uint32_t *)((uintptr_t)g_xbox_mem_offset + (uint32_t)(va)))
+
+/* XDK 5849 D3D (non-LTCG, in the D3D section). The device pointer lives at
+ * 0x0015A388; device+0x2C is the pushbuffer write sequence and device+0x30
+ * points at the GPU semaphore that BACK_END_WRITE_SEMAPHORE_RELEASE (0x1D70)
+ * writes, which is how the GPU reports how far it has got. */
+#define ANI_D3D_DEVICE_PTR  0x0015A388u
+
+void nv2a_pb_set_semaphore_target(uint32_t guest_va);
+
+/* D3D_BlockOnTime (0x0014FA40): waits until the semaphore at *(device+0x30)
+ * reaches a fence, spinning at 0x0014FB77. Nothing writes that semaphore
+ * unless the pushbuffer executor is told where it is, so the first D3D call
+ * to wait on the GPU (the display-mode switch in device creation) hung
+ * forever. Hand the executor the semaphore on first entry, then run the
+ * original. Needs RECOMP_PB_EXEC=1. */
+extern void sub_0014FA40_gen(void);
+void sub_0014FA40(void)
+{
+    static int registered;
+
+    if (!registered) {
+        uint32_t dev = GUEST32(ANI_D3D_DEVICE_PTR);
+        uint32_t sem = dev ? GUEST32(dev + 0x30) : 0;
+        if (sem) {
+            nv2a_pb_set_semaphore_target(sem);
+            registered = 1;
+            fprintf(stderr, "[D3D] GPU semaphore at 0x%08X (device 0x%08X)\n",
+                    sem, dev);
+        }
+    }
+    sub_0014FA40_gen();
+}
+
 recomp_func_t recomp_lookup_manual(uint32_t xbox_va)
 {
     /*

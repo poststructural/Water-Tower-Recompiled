@@ -36,13 +36,21 @@ cd "$TK"
 echo "== parse";  "$PY" -m tools.xbe_parser "$XBE" --json "$(dirname "$XBE")/animaniacs_analysis.json" >/dev/null
 # Not --text-only: the D3D8/XGRAPH/XMV/DSOUND/XPP code is statically linked in
 # its own sections and must be lifted too.
-echo "== disasm"; "$PY" -m tools.disasm "$XBE" --force
-if [ -n "${GHIDRA_HOME:-}" ]; then
+# config/seed_functions.json: entry points the detector misses, found at runtime.
+echo "== disasm"; "$PY" -m tools.disasm "$XBE" --force \
+    --seed-functions "$ROOT/config/seed_functions.json"
+# Ghidra's export does not depend on the disassembly, so it is reused once it
+# exists. FORCE_GHIDRA=1 re-runs the analysis.
+GEXPORT=tools/ghidra_naming/export/functions.json
+if [ -n "${GHIDRA_HOME:-}" ] && { [ ! -f "$GEXPORT" ] || [ "${FORCE_GHIDRA:-0}" = 1 ]; }; then
+    echo "== ghidra analysis"
+    XBE="$XBE" bash tools/ghidra_naming/run_ghidra.sh </dev/null
+fi
+if [ -f "$GEXPORT" ]; then
     echo "== ghidra naming"
-    bash tools/ghidra_naming/run_ghidra.sh </dev/null
     "$PY" tools/ghidra_naming/merge_names.py --apply
 else
-    echo "== ghidra naming skipped (GHIDRA_HOME unset)"
+    echo "== ghidra naming skipped (set GHIDRA_HOME to run it)"
 fi
 echo "== func_id"; "$PY" -m tools.func_id "$XBE"
 echo "== abi";     "$PY" -m tools.abi_analysis "$XBE"
@@ -50,5 +58,6 @@ echo "== recomp"
 rm -f "$ROOT"/src/recomp/gen/recomp_[0-9]*.c
 "$PY" -m tools.recomp "$XBE" --all --split 250 \
     --game-name "Animaniacs: The Great Edgar Hunt" \
+    --exclude-manual "$ROOT/src/recomp_manual.c" \
     --gen-dir "$ROOT/src/recomp/gen"
 echo "done: $ROOT/src/recomp/gen"

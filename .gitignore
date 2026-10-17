@@ -17,3 +17,4 @@ tkaXBoxDSPImage.bin
 /tools/*.log
 *.log
 stderr.txt
+/game

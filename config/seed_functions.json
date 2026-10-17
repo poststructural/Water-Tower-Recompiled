@@ -1,0 +1,26 @@
+[
+  {
+    "start": "0x001CCD53",
+    "note": "XPP callback right after sub_001CCBD8's ret; reached by ICALL during USB init"
+  },
+  {
+    "start": "0x001CE2A9",
+    "note": "XPP code reached by ICALL once the OHCI model enumerates a pad"
+  },
+  {
+    "start": "0x001CD855",
+    "note": "XPP: code directly after a ret with no padding and no inbound jump (static scan)"
+  },
+  {
+    "start": "0x001CD8A7",
+    "note": "XPP: code directly after a ret with no padding and no inbound jump (static scan)"
+  },
+  {
+    "start": "0x001CDC8A",
+    "note": "XPP: code directly after a ret with no padding and no inbound jump (static scan)"
+  },
+  {
+    "start": "0x001D0A54",
+    "note": "XPP: code directly after a ret with no padding and no inbound jump (static scan)"
+  }
+]
