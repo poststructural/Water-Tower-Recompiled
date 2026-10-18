@@ -36,6 +36,8 @@
 #include "nv2a_vk_runtime.h"
 #include "nv2a_window.h"
 #include "settings.h"
+#define SDL_MAIN_HANDLED   /* our own main(), not SDL_main */
+#include <SDL.h>
 
 extern void xbox_InputInit(void);
 
@@ -289,6 +291,79 @@ static void *guest_main(void *unused)
     return NULL;
 }
 
+/* ── Display ───────────────────────────────────────────────── */
+
+/* Turn settings.ini's display choices into the window, the picture shape and
+ * the render scale, now that the monitor is known.
+ *
+ *   window   windowed: the configured size (native = the monitor's), shrunk
+ *            to fit the monitor; fullscreen: the monitor.
+ *   aspect   the configured shape; auto = the window's (the monitor's in
+ *            fullscreen). Never narrower than the original 4:3: a 5:4 screen
+ *            gets 4:3 with bars, not a cropped view.
+ *   scale    render_scale, or the smallest multiple of 640x480 that covers
+ *            the picture on both axes (capped by max_render_scale).
+ *
+ * The shape goes to the game (ani_aspect: a wider horizontal view) and to the
+ * presenter; the scale to the GPU model through NV2A_SCALE, unless the
+ * environment already set it. */
+static void resolve_display(const AniSettings *st, int *win_w, int *win_h,
+                            double *aspect_out)
+{
+    extern float ani_aspect;   /* recomp_manual.c */
+    SDL_DisplayMode dm;
+    int mon_w = 1920, mon_h = 1080, out_w, out_h, pic_w, pic_h, scale;
+    double aspect;
+    char buf[8];
+
+    if (SDL_WasInit(SDL_INIT_VIDEO) || SDL_InitSubSystem(SDL_INIT_VIDEO) == 0) {
+        if (SDL_GetDesktopDisplayMode(0, &dm) == 0 && dm.w > 0 && dm.h > 0)
+            mon_w = dm.w, mon_h = dm.h;
+    }
+    if (st->mode != ANI_WINDOWED || !st->width || !st->height) {
+        out_w = mon_w;
+        out_h = mon_h;
+    } else {
+        out_w = st->width;
+        out_h = st->height;
+        if (out_w > mon_w || out_h > mon_h) {   /* keep the shape, fit the screen */
+            double k = (double)mon_w / out_w < (double)mon_h / out_h
+                     ? (double)mon_w / out_w : (double)mon_h / out_h;
+            out_w = (int)(out_w * k);
+            out_h = (int)(out_h * k);
+        }
+    }
+    aspect = st->aspect > 0 ? st->aspect : (double)out_w / out_h;
+    if (aspect < 4.0 / 3.0) aspect = 4.0 / 3.0;
+    if (aspect > 4.0) aspect = 4.0;
+
+    pic_w = out_w;
+    pic_h = (int)(out_w / aspect);
+    if (pic_h > out_h) {
+        pic_h = out_h;
+        pic_w = (int)(out_h * aspect);
+    }
+    scale = st->render_scale ? st->render_scale
+                             : ani_settings_auto_scale(pic_w, pic_h, st->max_render_scale);
+    snprintf(buf, sizeof buf, "%d", scale);
+    if (!getenv("NV2A_SCALE")) {
+#if defined(_WIN32)
+        _putenv_s("NV2A_SCALE", buf);
+#else
+        setenv("NV2A_SCALE", buf, 0);
+#endif
+    }
+    scale = atoi(getenv("NV2A_SCALE"));
+    ani_aspect = (float)aspect;
+    *win_w = out_w;
+    *win_h = out_h;
+    *aspect_out = aspect;
+    printf("Display: monitor %dx%d, %s %dx%d, picture %dx%d (%.3f:1), "
+           "render %dx%d (scale %d)\n",
+           mon_w, mon_h, st->mode == ANI_WINDOWED ? "window" : "fullscreen",
+           out_w, out_h, pic_w, pic_h, aspect, 640 * scale, 480 * scale, scale);
+}
+
 /* ── Entry (host main thread: window and events) ───────────── */
 
 int main(int argc, char **argv)
@@ -343,14 +418,13 @@ int main(int argc, char **argv)
     printf("Game directory: %s\n", s_game_dir);
 
     {
-        extern int ani_skip_intro, ani_widescreen;   /* recomp_manual.c */
+        extern int ani_skip_intro;   /* recomp_manual.c */
         char exe[4096], save[4096];
         exe_dir(exe, sizeof exe);
         save_dir_path(save, sizeof save);
         ani_mkdirs(save);
         ani_settings_load(&s_settings, exe, save);
         ani_skip_intro = s_settings.skip_intro;
-        ani_widescreen = s_settings.widescreen;
         printf("Settings: %s\n", s_settings.path);
     }
 
@@ -361,11 +435,12 @@ int main(int argc, char **argv)
     AddVectoredExceptionHandler(1, veh_handler);
 
     if (!s_headless) {
-        if (nv2a_window_create("Animaniacs: The Great Edgar Hunt",
-                               s_settings.width, s_settings.height,
-                               s_settings.fullscreen,
-                               s_settings.widescreen ? 16.0 / 9.0 : 4.0 / 3.0,
-                               s_settings.vsync) != 0) {
+        int win_w, win_h;
+        double aspect;
+        resolve_display(&s_settings, &win_w, &win_h, &aspect);
+        if (nv2a_window_create("Animaniacs: The Great Edgar Hunt", win_w, win_h,
+                               s_settings.mode == ANI_WINDOWED ? 0 : 1,
+                               aspect, s_settings.vsync) != 0) {
             fprintf(stderr, "Cannot open the game window.\n");
             return 1;
         }

@@ -84,9 +84,11 @@ build-vk/Animaniacs.exe
 ```
 
 Saves and `log.txt` go to `%LOCALAPPDATA%\AnimaniacsRecompiled` (`ANI_SAVE_DIR`
-overrides). `settings.ini` is written beside the exe on first run: window size,
-fullscreen (F11 / Alt+Enter in game), vsync, render scale (1-4, default 2 =
-1280x960), MSAA, texture filtering, and `skip_intro`. F10 shows the frame rate.
+overrides). `settings.ini` is written beside the exe on first run: windowed or fullscreen,
+output resolution (1080p, 1440p, 4K, ultrawide), aspect ratio (4:3 to 32:9,
+or auto), render scale (auto matches the output), MSAA, texture filtering and
+`skip_intro`. Every key is listed in [docs/SETTINGS.md](docs/SETTINGS.md).
+F11 / Alt+Enter toggles fullscreen and F10 shows the frame rate.
 
 Test switches: `ANI_LEVEL=N` (1-5) loads level N instead of the hub;
 `RECOMP_AUDIO_WAV=out.wav` records the audio output.

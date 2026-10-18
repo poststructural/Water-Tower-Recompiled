@@ -242,16 +242,18 @@ void sub_000ECF20(void)
     sub_000ECF20_gen();
 }
 
-int ani_widescreen;
+/* The picture shape the game renders for (main_vk.c, from settings.ini):
+ * 4:3 is the original; wider shapes widen the horizontal view (Hor+). */
+float ani_aspect = 4.0f / 3.0f;
 
 /* Camera projection scales (0x0005CC80, every frame from the render path):
  * calls sub_00063F30(camera, k * [0x002EEC50], k * [0x002EECA8]) -- the
  * horizontal and vertical scale factors (cot of the half-angles). The camera
  * modes keep the vertical one 4/3 of the horizontal (the fmul by 4/3 at
  * 0x0005C84F; pairs such as 2.4 / 3.2), which is a 4:3 view. For widescreen
- * the horizontal scale becomes 9/16 of the vertical for this call only: the
+ * the horizontal scale becomes 1/aspect of the vertical for this call only: the
  * same vertical view, a wider horizontal one (Hor+), which the presenter
- * stretches to 16:9. */
+ * shows at that shape. */
 #define ANI_PROJ_X 0x002EEC50u
 #define ANI_PROJ_Y 0x002EECA8u
 
@@ -262,10 +264,10 @@ void sub_0005CC80(void)
     volatile float *y = (volatile float *)((uintptr_t)g_xbox_mem_offset + ANI_PROJ_Y);
     float saved = *x;
 
-    if (ani_widescreen && saved > 0.0f) {
+    if (ani_aspect > 1.34f && saved > 0.0f) {
         float r = *y / saved;
         if (r > 1.30f && r < 1.37f)
-            *x = *y * (9.0f / 16.0f);
+            *x = *y / ani_aspect;
     }
     sub_0005CC80_gen();
     *x = saved;
@@ -282,7 +284,7 @@ void sub_0005CC80(void)
 extern void sub_00084110_gen(void);
 void sub_00084110(void)
 {
-    if (ani_widescreen) {
+    if (ani_aspect > 1.34f) {
         volatile float *aspect = (volatile float *)
             ((uintptr_t)g_xbox_mem_offset + (uint32_t)(g_esp + 8));
         float a = *aspect;
@@ -294,7 +296,7 @@ void sub_00084110(void)
                                             (uint32_t)(g_esp + 4)), a);
         }
         if (a > 1.33f && a < 1.34f) {
-            *aspect = 16.0f / 9.0f;
+            *aspect = ani_aspect;
             sub_00084110_gen();
             /* cdecl: the caller pops the arguments, so restore what it passed. */
             *(volatile float *)((uintptr_t)g_xbox_mem_offset +
