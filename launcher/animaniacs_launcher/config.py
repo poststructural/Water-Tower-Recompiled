@@ -58,6 +58,9 @@ class Settings:
     # Builds kept besides the current one, for rolling back.
     keep_builds: int = 1
     show_console: bool = False
+    close_on_play: bool = False
+    # Save profile ("" = the game's own save folder); see profiles.py.
+    profile: str = ""
     check_updates_on_start: bool = True
     # Optional: Ghidra 12 install and JDK 21, for function names in crash logs.
     ghidra_home: str = ""

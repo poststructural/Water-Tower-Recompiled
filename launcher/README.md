@@ -28,7 +28,28 @@ python launcher/run_launcher.py --help     # the same steps from the command lin
    `settings.ini` (window, fullscreen, render scale, skip intros) moves with
    you to each new build.
 4. **Play.** Starts the current build on your game files and keeps its log in
-   `logs/`. Saves stay in `%LOCALAPPDATA%\AnimaniacsRecompiled`.
+   `logs/`. If the game crashes or closes during start-up, Home shows the end
+   of its log and a Copy system info button for bug reports.
+
+The window has tabs like the Crackdown recomp's launcher:
+
+| Tab | What it sets |
+|---|---|
+| Home | Play, verify game files, check for updates, change the game source |
+| Display | Resolution (4:3 and 16:9 presets up to 4K, or custom), window mode, v-sync, widescreen, frame rate counter |
+| Graphics | Internal resolution (1x-4x), anti-aliasing, texture filtering |
+| Gameplay | Skip intros, close the launcher on Play |
+| Saves | Save profiles (each its own save folder), open or back up saves |
+| Updates | Release or main channel, build / update, installed builds, build log |
+| About | Logs, system info, developer options |
+
+Display, Graphics and Gameplay edit the game's own `settings.ini` beside the
+exe, in place: comments and keys the launcher doesn't know are kept. A 16:9
+resolution turns on the widescreen (Hor+) view. Q / E switch tabs and Esc goes
+back; on Windows a controller works too (LB / RB tabs, D-pad, A, B).
+
+Save profiles are passed to the game as `ANI_SAVE_DIR`; the default profile
+is the game's own `%LOCALAPPDATA%\AnimaniacsRecompiled`.
 
 The launcher also offers its own updates from `launcher-v*` releases.
 

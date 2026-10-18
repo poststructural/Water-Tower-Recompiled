@@ -8,7 +8,7 @@ import subprocess
 import sys
 import time
 
-from . import build, config
+from . import build, config, profiles
 
 
 class PlayError(Exception):
@@ -42,6 +42,7 @@ def launch(settings: config.Settings) -> tuple[subprocess.Popen, str]:
     exe, dirs = current_exe(settings)
     env = dict(os.environ)
     env["PATH"] = os.pathsep.join([*dirs, env.get("PATH", "")])
+    env.update(profiles.env(settings.profile))
     env.update(settings.extra_env)
     os.makedirs(config.sub("logs"), exist_ok=True)
     log_path = config.sub("logs", time.strftime("game-%Y%m%d-%H%M%S.txt"))
@@ -61,6 +62,43 @@ def launch(settings: config.Settings) -> tuple[subprocess.Popen, str]:
         raise PlayError(f"could not start the game: {e}")
     log.close()  # the child holds its own handle
     return p, log_path
+
+
+def log_tail(path: str, lines: int = 25) -> str:
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            return "".join(f.readlines()[-lines:])
+    except OSError:
+        return ""
+
+
+def system_info(settings: config.Settings) -> str:
+    """Text for a bug report: versions, OS, build and settings.ini."""
+    import platform
+
+    from . import __version__, gamefiles, gamesettings
+    lines = [f"Launcher: {__version__}",
+             f"OS: {platform.platform()} ({platform.machine()})",
+             f"Build: {settings.custom_exe or settings.current_build or 'none'}"]
+    try:
+        with open(config.sub("builds", settings.current_build, "build.json"), encoding="utf-8") as f:
+            meta = json.load(f)
+        lines.append(f"Commit: {meta.get('sha', '?')} ({meta.get('channel', '?')}, built {meta.get('built', '?')})")
+    except (OSError, ValueError):
+        pass
+    if settings.game_dir:
+        lines.append(f"Game files: {gamefiles.check_dir(settings.game_dir).summary()}")
+    lines.append(f"Profile: {settings.profile or 'default'}")
+    try:
+        exe, _ = current_exe(settings)
+        ini = gamesettings.location(exe)
+        with open(ini, encoding="utf-8", errors="replace") as f:
+            body = [ln for ln in f.read().splitlines() if ln.strip() and not ln.lstrip().startswith((";", "#"))]
+        lines.append("settings.ini:")
+        lines += ["  " + ln for ln in body]
+    except (OSError, PlayError):
+        pass
+    return "\n".join(lines) + "\n"
 
 
 def _prune_logs(keep: int) -> None:
