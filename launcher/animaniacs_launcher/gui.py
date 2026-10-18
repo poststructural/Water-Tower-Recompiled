@@ -24,8 +24,8 @@ from tkinter.scrolledtext import ScrolledText
 
 from . import (REPO, __version__, build, config, gamefiles, gamepad, gamesettings, play,
                profiles, updates)
-from .gamesettings import (MSAA, RENDER_SCALES, RESOLUTIONS, TEXTURE_FILTERS, VSYNC,
-                           WINDOW_MODES)
+from .gamesettings import (ASPECTS, MAX_SCALES, MODES, MSAA, RENDER_SCALES, RESOLUTIONS,
+                           TEXTURE_FILTERS, VSYNC)
 
 CHANNELS = {"release": "Releases", "main": "Latest main (newest commit)"}
 TABS = ["HOME", "DISPLAY", "GRAPHICS", "GAMEPLAY", "SAVES", "UPDATES", "ABOUT"]
@@ -299,11 +299,14 @@ class App:
 
     def _display(self) -> ttk.Frame:
         f = self._page()
-        self._heading(f, "Display", "Window size, fullscreen and widescreen. A 16:9 size turns "
-                                    "on the widescreen view: the same height, a wider view to the sides.")
-        self.res = Choice(f, [(f"{w}x{h}", label) for w, h, _, label in RESOLUTIONS]
-                          + [("custom", "Custom…")], command=self._res_changed)
-        self._row(f, "Resolution", self.res.box)
+        self._heading(f, "Display", "Fullscreen uses your monitor's resolution. A wider aspect "
+                                    "ratio shows more of the world at the sides; the menus and HUD "
+                                    "stretch to fit.")
+        self.mode = Choice(f, MODES, command=lambda: (self._set("display.mode", self.mode.get()),
+                                                      self._mode_shown()))
+        self._row(f, "Mode", self.mode.box, "F11 / Alt+Enter")
+        self.res = Choice(f, RESOLUTIONS + [("custom", "Custom…")], command=self._res_changed)
+        self.res_label = self._row(f, "Window size", self.res.box)
         cust = ttk.Frame(f, style="Panel.TFrame")
         self.width = tk.StringVar()
         self.height = tk.StringVar()
@@ -315,19 +318,14 @@ class App:
         for v in (self.width, self.height):
             v.trace_add("write", lambda *_: self._custom_changed())
         self.cust = (cust, self._row(f, "Custom size", cust))
-        self.mode = Choice(f, WINDOW_MODES, command=lambda: self._set("display.fullscreen", self.mode.get()))
-        self._row(f, "Window mode", self.mode.box, "F11 or Alt+Enter in game")
+        self.aspect = Choice(f, ASPECTS, command=lambda: self._set("display.aspect", self.aspect.get()))
+        self._row(f, "Aspect ratio", self.aspect.box)
         self.vsync = Choice(f, VSYNC, command=lambda: self._set("display.vsync", self.vsync.get()))
         self._row(f, "V-sync", self.vsync.box)
-        self.wide = tk.BooleanVar()
-        self._row(f, "Widescreen", ttk.Checkbutton(
-            f, text="16:9 view (Hor+)", variable=self.wide,
-            command=lambda: self._set("display.widescreen", "1" if self.wide.get() else "0")),
-            "menus and HUD stretch to 16:9")
         self.fps = tk.BooleanVar()
         self._row(f, "Frame rate counter", ttk.Checkbutton(
             f, text="Show", variable=self.fps,
-            command=lambda: self._set("display.show_fps", "1" if self.fps.get() else "0")),
+            command=lambda: self._set("display.show_fps", "on" if self.fps.get() else "off")),
             "F10 in game")
         self._save_row(f)
         self.ini_label = ttk.Label(f, style="PanelMuted.TLabel", cursor="hand2")
@@ -337,14 +335,20 @@ class App:
 
     def _graphics(self) -> ttk.Frame:
         f = self._page()
-        self._heading(f, "Graphics", "The internal resolution is what the GPU draws at before "
-                                     "the picture is scaled to the window. Higher looks sharper "
-                                     "and costs more GPU time.")
-        self.scale = Choice(f, RENDER_SCALES, command=lambda: self._set("graphics.render_scale", self.scale.get()))
+        self._heading(f, "Graphics", "The internal resolution is what the GPU draws at, as a "
+                                     "multiple of the Xbox's 640 x 480, before the picture is "
+                                     "scaled to the screen. Auto picks enough for your output "
+                                     "resolution.")
+        self.scale = Choice(f, RENDER_SCALES, width=36,
+                            command=lambda: self._set("graphics.render_scale", self.scale.get()))
         self._row(f, "Internal resolution", self.scale.box)
-        self.msaa = Choice(f, MSAA, command=lambda: self._set("graphics.msaa", self.msaa.get()))
+        self.max_scale = Choice(f, MAX_SCALES, width=36,
+                                command=lambda: self._set("graphics.max_render_scale", self.max_scale.get()))
+        self._row(f, "Auto limit", self.max_scale.box, "lower it if a slower GPU drops below 60 fps")
+        self.msaa = Choice(f, MSAA, width=36, command=lambda: self._set("graphics.msaa", self.msaa.get()))
         self._row(f, "Anti-aliasing", self.msaa.box)
-        self.filt = Choice(f, TEXTURE_FILTERS, command=lambda: self._set("graphics.texture_filter", self.filt.get()))
+        self.filt = Choice(f, TEXTURE_FILTERS, width=36,
+                           command=lambda: self._set("graphics.texture_filter", self.filt.get()))
         self._row(f, "Texture filtering", self.filt.box)
         self.scale_hint = ttk.Label(f, style="PanelMuted.TLabel", wraplength=760, justify="left")
         self.scale_hint.grid(sticky="w", columnspan=3, pady=(8, 0))
@@ -357,7 +361,7 @@ class App:
         self.skip = tk.BooleanVar()
         self._row(f, "Start-up", ttk.Checkbutton(
             f, text="Skip the publisher logos and intro movie", variable=self.skip,
-            command=lambda: self._set("game.skip_intro", "1" if self.skip.get() else "0")))
+            command=lambda: self._set("game.skip_intro", "on" if self.skip.get() else "off")))
         self.close_play = tk.BooleanVar(value=self.st.close_on_play)
         self._row(f, "Launcher", ttk.Checkbutton(
             f, text="Close the launcher when the game starts", variable=self.close_play,
@@ -584,21 +588,22 @@ class App:
 
     def _fill_game_settings(self) -> None:
         self.loading = True
-        w, h = self._v("display.width"), self._v("display.height")
-        self.width.set(w)
-        self.height.set(h)
-        key = f"{w}x{h}"
-        self.res.set(key if any(v == key for v, _ in self.res.pairs) else "custom")
-        self._show_custom()
-        self.mode.set(self._v("display.fullscreen"))
+        res = self._v("display.resolution")
+        self.res.set(res if any(v == res for v, _ in self.res.pairs) else "custom")
+        w, _, h = res.partition("x")
+        self.width.set(w if w.isdigit() else "1920")
+        self.height.set(h if h.isdigit() else "1080")
+        self.mode.set(self._v("display.mode"))
+        self.aspect.set(self._v("display.aspect"))
         self.vsync.set(self._v("display.vsync"))
-        self.wide.set(self._v("display.widescreen") == "1")
-        self.fps.set(self._v("display.show_fps") == "1")
+        self.fps.set(self._v("display.show_fps") == "on")
         self.scale.set(self._v("graphics.render_scale"))
+        self.max_scale.set(self._v("graphics.max_render_scale"))
         self.msaa.set(self._v("graphics.msaa"))
         self.filt.set(self._v("graphics.texture_filter"))
-        self.skip.set(self._v("game.skip_intro") == "1")
+        self.skip.set(self._v("game.skip_intro") == "on")
         self.loading = False
+        self._mode_shown()
         self._scale_hint()
         self._dirty()
 
@@ -619,47 +624,71 @@ class App:
         self.ini_label.config(text=f"settings.ini: {path}" if path else
                               "settings.ini is created once a build is installed.")
 
-    def _show_custom(self) -> None:
+    def _mode_shown(self) -> None:
+        """Window size only matters windowed; custom size only for Custom."""
+        windowed = self.mode.get() != "fullscreen"
+        for w in (self.res.box, self.res_label):
+            w.grid() if windowed else w.grid_remove()
         for w in self.cust:
-            w.grid() if self.res.get() == "custom" else w.grid_remove()
+            w.grid() if windowed and self.res.get() == "custom" else w.grid_remove()
 
     def _res_changed(self) -> None:
+        self._mode_shown()
         v = self.res.get()
-        self._show_custom()
         if v == "custom":
-            return
-        w, h = v.split("x")
-        wide = next(ws for ww, hh, ws, _ in RESOLUTIONS if f"{ww}x{hh}" == v)
-        self.loading = True
-        self.width.set(w)
-        self.height.set(h)
-        self.wide.set(wide)
-        self.loading = False
-        self._set("display.width", w)
-        self._set("display.height", h)
-        self._set("display.widescreen", "1" if wide else "0")
+            self._custom_changed()
+        else:
+            self._set("display.resolution", v)
 
     def _custom_changed(self) -> None:
         if self.loading:
             return
         w, h = self.width.get().strip(), self.height.get().strip()
         if w.isdigit() and h.isdigit() and int(w) >= 320 and int(h) >= 240:
-            self._set("display.width", w)
-            self._set("display.height", h)
+            self._set("display.resolution", f"{w}x{h}")
+
+    def _output_size(self) -> tuple[int, int, str]:
+        """The output picture the game will draw for: (width, height, what)."""
+        sw, sh = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+        res = self._v("display.resolution")
+        if self._v("display.mode") == "fullscreen" or res == "native":
+            w, h, what = sw, sh, "your monitor"
+        else:
+            try:
+                w, h = (int(x) for x in res.split("x"))
+            except ValueError:
+                w, h = 1920, 1080
+            what = f"a {w} x {h} window"
+        aspect = self._v("display.aspect")
+        if aspect != "auto":
+            # The picture's shape inside the output: width follows the aspect.
+            try:
+                aw, ah = (float(x) for x in aspect.split(":"))
+                w = min(w, round(h * aw / ah)) if aw / ah >= 4 / 3 else round(h * 4 / 3)
+            except ValueError:
+                pass
+        return w, h, what
 
     def _scale_hint(self) -> None:
+        w, h, what = self._output_size()
         try:
-            s = int(self._v("graphics.render_scale"))
-            h = int(self._v("display.height"))
+            limit = int(self._v("graphics.max_render_scale"))
         except ValueError:
-            return
-        drawn = 480 * s
-        if drawn < h:
-            tip = f"The game draws {drawn} lines for a {h}-line window: raise the internal resolution for a sharper picture."
-        elif drawn >= 2 * h:
-            tip = f"The game draws {drawn} lines for a {h}-line window: a lower internal resolution looks the same and runs faster."
+            limit = 6
+        v = self._v("graphics.render_scale")
+        if v == "auto":
+            n = gamesettings.auto_scale(w, h, limit)
+            tip = f"Auto draws at {n}x ({640 * n} x {480 * n}) for {what}."
+            if gamesettings.auto_scale(w, h, 8) > limit:
+                tip += f" That is the auto limit; {what} would get {gamesettings.auto_scale(w, h, 8)}x without it."
         else:
-            tip = f"The game draws {drawn} lines for a {h}-line window."
+            n = int(v) if v.isdigit() else 2
+            need = gamesettings.auto_scale(w, h, 8)
+            tip = f"Draws at {n}x ({640 * n} x {480 * n}) for {what}."
+            if n < need:
+                tip += f" {need}x would match it; lower looks softer."
+            elif n > need + 1:
+                tip += f" {need}x already matches it and runs lighter."
         self.scale_hint.config(text=tip)
 
     def save_game_settings(self) -> bool:

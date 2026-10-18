@@ -36,16 +36,18 @@ The window has tabs like the Crackdown recomp's launcher:
 | Tab | What it sets |
 |---|---|
 | Home | Play, verify game files, check for updates, change the game source |
-| Display | Resolution (4:3 and 16:9 presets up to 4K, or custom), window mode, v-sync, widescreen, frame rate counter |
-| Graphics | Internal resolution (1x-4x), anti-aliasing, texture filtering |
+| Display | Windowed or fullscreen (borderless, monitor resolution), window size (720p to 4K, ultrawide, native, or custom), aspect ratio (auto, 4:3, 16:9, 16:10, 21:9, 32:9), v-sync, frame rate counter |
+| Graphics | Internal resolution (auto or 1x-8x), the auto limit, anti-aliasing, texture filtering |
 | Gameplay | Skip intros, close the launcher on Play |
 | Saves | Save profiles (each its own save folder), open or back up saves |
 | Updates | Release or main channel, build / update, installed builds, build log |
 | About | Logs, system info, developer options |
 
 Display, Graphics and Gameplay edit the game's own `settings.ini` beside the
-exe, in place: comments and keys the launcher doesn't know are kept. A 16:9
-resolution turns on the widescreen (Hor+) view. Q / E switch tabs and Esc goes
+exe, in place: comments and keys the launcher doesn't know are kept. The keys
+are the ones in `docs/SETTINGS.md`; a file from the first version (width,
+height, fullscreen, widescreen) is read, and each old key is replaced by its
+new one when that setting is saved. Q / E switch tabs and Esc goes
 back; on Windows a controller works too (LB / RB tabs, D-pad, A, B).
 
 Save profiles are passed to the game as `ANI_SAVE_DIR`; the default profile

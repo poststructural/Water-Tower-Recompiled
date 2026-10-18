@@ -11,19 +11,42 @@ def test_edit_keeps_comments_and_unknown_keys(tmp_path):
     p = tmp_path / "settings.ini"
     p.write_text(GAME_WRITTEN)
     ini = gamesettings.load(str(p))
-    assert gamesettings.value(ini, "display.width") == "1280"
-    assert gamesettings.value(ini, "display.widescreen") == "0"  # not in the file: default
-    gamesettings.apply(ini, {"display.width": "1920", "display.height": "1080",
-                             "display.widescreen": "1", "graphics.render_scale": "3"})
+    assert gamesettings.value(ini, "display.resolution") == "1920x1080"
+    assert gamesettings.value(ini, "graphics.render_scale") == "auto"
+    gamesettings.apply(ini, {"display.resolution": "2560x1440", "display.aspect": "21:9",
+                             "graphics.render_scale": "4", "game.skip_intro": "on"})
     ini.save(str(p))
     text = p.read_text()
-    assert "width = 1920" in text and "height = 1080" in text and "render_scale = 3" in text
-    assert "; Window size in pixels" in text and "hdr = 1" in text
-    # The new key lands inside [display], before [graphics].
-    assert text.index("widescreen = 1") < text.index("[graphics]")
+    for line in ("resolution = 2560x1440", "aspect = 21:9", "render_scale = 4", "skip_intro = on",
+                 "max_render_scale = 6"):
+        assert line in text
+    assert "; Picture shape" in text and "hdr = 1" in text
     assert text.count("[display]") == 1
-    again = gamesettings.load(str(p))
-    assert gamesettings.value(again, "display.widescreen") == "1"
+
+
+def test_first_version_keys(tmp_path):
+    old = ("[display]\nwidth = 1280\nheight = 960\nfullscreen = 2\nvsync = 2\nwidescreen = 1\n"
+           "show_fps = 1\n[graphics]\nrender_scale = 2\n[game]\nskip_intro = 1\n")
+    ini = gamesettings.IniFile(old)
+    v = {n: gamesettings.value(ini, n) for n in gamesettings.OPTIONS}
+    assert v["display.resolution"] == "1280x960" and v["display.mode"] == "fullscreen"
+    assert v["display.aspect"] == "16:9" and v["display.vsync"] == "adaptive"
+    assert v["display.show_fps"] == "on" and v["game.skip_intro"] == "on"
+    assert v["graphics.max_render_scale"] == "6"
+    # Writing a new key drops the old ones it replaces (the last key read wins).
+    gamesettings.apply(ini, {"display.resolution": "1920x1080", "display.mode": "windowed"})
+    text = ini.text()
+    assert "width" not in text and "height" not in text and "fullscreen" not in text
+    assert "resolution = 1920x1080" in text and "mode = windowed" in text
+    assert "widescreen = 1" in text  # untouched until aspect is changed
+    assert gamesettings.value(ini, "display.aspect") == "16:9"
+
+
+def test_auto_scale_matches_docs():
+    # docs/SETTINGS.md: 2 at 720p, 3 at 1080p, 4 at 1440p, 6 at 4K (16:9).
+    assert [gamesettings.auto_scale(w, h) for w, h in
+            [(1280, 720), (1920, 1080), (2560, 1440), (3840, 2160)]] == [2, 3, 4, 6]
+    assert gamesettings.auto_scale(3840, 2160, limit=4) == 4
 
 
 def test_missing_section_is_added(tmp_path):

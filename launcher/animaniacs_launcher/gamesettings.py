@@ -24,30 +24,37 @@ FILENAME = "settings.ini"
 # file yet and the source checkout is not around to read them from.
 FALLBACK_TEMPLATE = """\
 ; Animaniacs: The Great Edgar Hunt (static recompilation) settings.
-; Delete this file to get the defaults back.
+; Delete this file to get the defaults back. Reference: docs/SETTINGS.md
 
 [display]
-; Window size in pixels at start-up (F11 or Alt+Enter toggles fullscreen).
-width = 1280
-height = 960
-; 0 windowed, 1 fullscreen, 2 borderless fullscreen
-fullscreen = 0
-; 1 sync to the display (no tearing), 0 off, 2 adaptive
-vsync = 1
-; 1 shows the frame rate (F10 toggles it in game)
-show_fps = 0
+; windowed, fullscreen (borderless, at the monitor's resolution) or exclusive
+; F11 or Alt+Enter switches between windowed and fullscreen in game.
+mode = windowed
+; Window size: 1280x720, 1920x1080, 2560x1440, 3840x2160 ... or native
+; (the monitor's resolution). Fullscreen always uses the monitor's.
+resolution = 1920x1080
+; Picture shape: 4:3 (original), 16:9, 16:10, 21:9, 32:9, or auto (the
+; monitor's). Wider shapes show more of the world at the sides.
+aspect = auto
+; on (no tearing), off, or adaptive
+vsync = on
+; on shows the frame rate (F10 toggles it in game)
+show_fps = off
 
 [graphics]
-; Internal render resolution: 1 is the console's 640x480, 2 is 1280x960, up to 4
-render_scale = 2
+; Internal resolution as a multiple of the console's 640x480, 1 to 8, or
+; auto: enough for the output resolution (3 at 1080p, 4 at 1440p, 6 at 4K).
+render_scale = auto
+; Upper limit for auto, to keep slower GPUs at 60 fps
+max_render_scale = 6
 ; Multisample anti-aliasing: 1 (off), 2, 4 or 8
 msaa = 1
 ; smooth (filtered, mipmapped) or console (as the Xbox drew it)
 texture_filter = smooth
 
 [game]
-; 1 skips the publisher logos and intro movie at start-up
-skip_intro = 0
+; on skips the publisher logos and intro movie at start-up
+skip_intro = off
 """
 
 
@@ -59,37 +66,59 @@ class Option:
     label: str
 
 
-# What the launcher shows, with the game's defaults.
+# What the launcher shows, with the game's defaults (docs/SETTINGS.md). This
+# table and the choice lists below are the only places that know the keys.
 OPTIONS = {o.section + "." + o.key: o for o in [
-    Option("display", "width", "1280", "Width"),
-    Option("display", "height", "960", "Height"),
-    Option("display", "fullscreen", "0", "Window mode"),
-    Option("display", "vsync", "1", "V-sync"),
-    Option("display", "widescreen", "0", "Widescreen (16:9)"),
-    Option("display", "show_fps", "0", "Show frame rate"),
-    Option("graphics", "render_scale", "2", "Internal resolution"),
+    Option("display", "mode", "windowed", "Mode"),
+    Option("display", "resolution", "1920x1080", "Resolution"),
+    Option("display", "aspect", "auto", "Aspect ratio"),
+    Option("display", "vsync", "on", "V-sync"),
+    Option("display", "show_fps", "off", "Show frame rate"),
+    Option("graphics", "render_scale", "auto", "Internal resolution"),
+    Option("graphics", "max_render_scale", "6", "Auto limit"),
     Option("graphics", "msaa", "1", "Anti-aliasing"),
     Option("graphics", "texture_filter", "smooth", "Texture filtering"),
-    Option("game", "skip_intro", "0", "Skip intro logos and movie"),
+    Option("game", "skip_intro", "off", "Skip intro logos and movie"),
 ]}
 
+# Keys from the first settings.ini. The game still reads them, and whichever
+# of an old and a new key comes last in the file wins, so a save that writes
+# a new key removes its old one.
+LEGACY = {
+    "display.resolution": ("width", "height"),
+    "display.mode": ("fullscreen",),
+    "display.aspect": ("widescreen",),
+}
+
 # Choices for the launcher's drop-downs: (value, label).
-WINDOW_MODES = [("0", "Windowed"), ("1", "Fullscreen"), ("2", "Borderless fullscreen")]
-VSYNC = [("1", "On"), ("2", "Adaptive"), ("0", "Off")]
-RENDER_SCALES = [("1", "1x  (640 x 480, original)"), ("2", "2x  (1280 x 960)"),
-                 ("3", "3x  (1920 x 1440)"), ("4", "4x  (2560 x 1920)")]
+MODES = [("windowed", "Windowed"), ("fullscreen", "Fullscreen (borderless, monitor resolution)")]
+RESOLUTIONS = [
+    ("1280x720", "1280 x 720  (720p)"), ("1600x900", "1600 x 900"),
+    ("1920x1080", "1920 x 1080  (1080p)"), ("2560x1440", "2560 x 1440  (1440p)"),
+    ("3840x2160", "3840 x 2160  (4K)"), ("2560x1080", "2560 x 1080  (ultrawide)"),
+    ("3440x1440", "3440 x 1440  (ultrawide)"), ("native", "Native (monitor resolution)"),
+]
+ASPECTS = [("auto", "Auto (window or monitor shape)"), ("4:3", "4:3  (original)"),
+           ("16:9", "16:9"), ("16:10", "16:10"), ("21:9", "21:9"), ("32:9", "32:9")]
+VSYNC = [("on", "On"), ("adaptive", "Adaptive"), ("off", "Off")]
+RENDER_SCALES = [("auto", "Auto (matches the output resolution)")] + [
+    (str(n), f"{n}x  ({640 * n} x {480 * n})") for n in range(1, 9)]
+MAX_SCALES = [(str(n), f"{n}x  ({640 * n} x {480 * n})") for n in range(1, 9)]
 MSAA = [("1", "Off"), ("2", "2x MSAA"), ("4", "4x MSAA"), ("8", "8x MSAA")]
 TEXTURE_FILTERS = [("smooth", "Smooth (filtered)"), ("console", "Console (as on Xbox)")]
-# (width, height, widescreen, label); widescreen sizes turn on the Hor+ view.
-RESOLUTIONS = [
-    (1280, 960, False, "1280 x 960  (4:3, original)"),
-    (1440, 1080, False, "1440 x 1080  (4:3)"),
-    (1920, 1440, False, "1920 x 1440  (4:3)"),
-    (1280, 720, True, "1280 x 720  (16:9)"),
-    (1920, 1080, True, "1920 x 1080  (16:9)"),
-    (2560, 1440, True, "2560 x 1440  (16:9)"),
-    (3840, 2160, True, "3840 x 2160  (16:9)"),
-]
+SWITCHES = ("display.show_fps", "game.skip_intro")
+
+
+def is_on(v: str) -> bool:
+    return v.strip().lower() in ("1", "on", "true", "yes")
+
+
+def auto_scale(width: int, height: int, limit: int = 6) -> int:
+    """What render_scale = auto picks (src/settings.c): the smallest multiple
+    of 640x480 that covers the picture on both axes, up to the limit."""
+    s = max(-(-width // 640), -(-height // 480), 1)
+    return min(s, max(1, limit))
+
 
 _SECTION = re.compile(r"^\s*\[([^\]]*)\]\s*$")
 _KEY = re.compile(r"^(\s*)([^=;#\s][^=]*?)(\s*=\s*)(.*?)(\s*)$")
@@ -145,6 +174,13 @@ class IniFile:
         else:
             self.lines.insert(end, f"{key} = {value}")
 
+    def remove(self, section: str, key: str) -> None:
+        while True:
+            i, _ = self._find(section, key)
+            if i < 0:
+                return
+            del self.lines[i]
+
     def text(self) -> str:
         return "\n".join(self.lines) + "\n"
 
@@ -187,12 +223,42 @@ def load(path: str) -> IniFile:
     return IniFile(template_from_source() or FALLBACK_TEMPLATE)
 
 
+def _legacy(ini: IniFile, name: str) -> str | None:
+    """A new key's value from the first version's keys, when only those exist."""
+    if name == "display.resolution":
+        w, h = ini.get("display", "width"), ini.get("display", "height")
+        return f"{w}x{h}" if w and h and w.isdigit() and h.isdigit() else None
+    if name == "display.mode":
+        v = ini.get("display", "fullscreen")
+        return None if v is None else ("windowed" if v.strip() in ("0", "") else "fullscreen")
+    if name == "display.aspect":
+        v = ini.get("display", "widescreen")
+        return None if v is None else ("16:9" if is_on(v) else "4:3")
+    return None
+
+
 def value(ini: IniFile, name: str) -> str:
+    """The value the launcher shows: the file's, in the launcher's spelling."""
     o = OPTIONS[name]
-    return ini.get(o.section, o.key, o.default)
+    v = ini.get(o.section, o.key)
+    if v is None:
+        v = _legacy(ini, name)
+    if v is None:
+        return o.default
+    v = v.strip().lower()
+    if name in SWITCHES:
+        return "on" if is_on(v) else "off"
+    if name == "display.vsync":
+        return {"1": "on", "true": "on", "yes": "on", "0": "off", "false": "off",
+                "no": "off", "2": "adaptive"}.get(v, v)
+    if name == "display.mode" and v == "exclusive":
+        return "fullscreen"
+    return v
 
 
 def apply(ini: IniFile, changes: dict[str, str]) -> None:
     for name, v in changes.items():
         o = OPTIONS[name]
         ini.set(o.section, o.key, v)
+        for old in LEGACY.get(name, ()):
+            ini.remove(o.section, old)
