@@ -1,0 +1,26 @@
+diff --git a/xboxrecomp/src/kernel/recomp_capture.c b/xboxrecomp/src/kernel/recomp_capture.c
+index 4a5f574..b63cae6 100644
+--- a/xboxrecomp/src/kernel/recomp_capture.c
++++ b/xboxrecomp/src/kernel/recomp_capture.c
+@@ -101,8 +101,19 @@ static void snap_write(void)
+ static void cover_entry(uint32_t va)
+ {
+     uint64_t t = now_ms() - s_start_ms;
+-    if (s_snap_prefix && __atomic_exchange_n(&s_snap_req, 0, __ATOMIC_ACQ_REL))
+-        snap_write();
++    if (s_snap_prefix) {
++        /* Hosts without SIGUSR2 (Windows): creating <prefix>.req asks for a
++         * snapshot; it is checked every 2^20 entries and removed. */
++        static unsigned polls;
++        if ((++polls & 0xFFFFFu) == 0) {
++            char req[1024];
++            snprintf(req, sizeof req, "%s.req", s_snap_prefix);
++            if (remove(req) == 0)
++                s_snap_req = 1;
++        }
++        if (__atomic_exchange_n(&s_snap_req, 0, __ATOMIC_ACQ_REL))
++            snap_write();
++    }
+     if (t < s_cover_from)
+         return;
+     if (t >= s_cover_to) {

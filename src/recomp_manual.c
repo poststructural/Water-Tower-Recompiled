@@ -239,6 +239,22 @@ void sub_000ECF20(void)
             }
         }
     }
+#if defined(ANI_NV2A_VK)
+    /* The movie plays inside this call (sub_0013B7E0 runs it to the end), and
+     * every movie is 640x480 4:3. Show it at 4:3 while it plays, so a wide
+     * picture setting pillarboxes it instead of stretching it. */
+    {
+        extern float ani_aspect;
+        extern void nv2a_present_set_aspect(double aspect);
+        if (ani_aspect > 1.34f) {
+            fprintf(stderr, "[ANI] movie at 4:3 (picture %.3f:1)\n", ani_aspect);
+            nv2a_present_set_aspect(4.0 / 3.0);
+            sub_000ECF20_gen();
+            nv2a_present_set_aspect(ani_aspect);
+            return;
+        }
+    }
+#endif
     sub_000ECF20_gen();
 }
 
@@ -289,11 +305,21 @@ void sub_00084110(void)
             ((uintptr_t)g_xbox_mem_offset + (uint32_t)(g_esp + 8));
         float a = *aspect;
         if (getenv("ANI_WS_LOG")) {
-            static int n;
-            if (n++ < 20)
-                fprintf(stderr, "[ANI] projection: fov %f aspect %f\n",
-                        *(volatile float *)((uintptr_t)g_xbox_mem_offset +
-                                            (uint32_t)(g_esp + 4)), a);
+            static float seen[16][7];
+            static int nseen;
+            float v[7];
+            int i;
+            for (i = 0; i < 7; i++)
+                v[i] = *(volatile float *)((uintptr_t)g_xbox_mem_offset +
+                                           (uint32_t)(g_esp + 4 + 4 * i));
+            for (i = 0; i < nseen && memcmp(seen[i], v, sizeof v); i++)
+                ;
+            if (i == nseen && nseen < 16) {
+                memcpy(seen[nseen++], v, sizeof v);
+                fprintf(stderr, "[ANI] projection: %f %f %f %f | %f %f %f from 0x%08X\n",
+                        v[0], v[1], v[2], v[3], v[4], v[5], v[6],
+                        GUEST32(g_esp));
+            }
         }
         if (a > 1.33f && a < 1.34f) {
             *aspect = ani_aspect;
@@ -306,6 +332,53 @@ void sub_00084110(void)
     }
     sub_00084110_gen();
 }
+
+/* Cutscene letterbox (0x000A7C00, every frame from the render loop
+ * sub_0009ABD0). While a cutscene runs, the state at 0x00312D84 is non-zero
+ * and this draws two black quads with the 2D quad routine 0x0011E4A0 --
+ * 0..60 and 360..480 of the 640x480 screen -- sliding them in and out by the
+ * offset at 0x00312D80, which it also advances. In a picture wider than 4:3
+ * the cutscene view is already wide, so the bars are left out; the state
+ * and the slide still advance, since scripts wait on them. */
+static int s_in_letterbox;
+
+extern void sub_000A7C00_gen(void);
+void sub_000A7C00(void)
+{
+    extern float ani_aspect;
+    s_in_letterbox = ani_aspect > 1.34f;
+    sub_000A7C00_gen();
+    s_in_letterbox = 0;
+}
+
+/* 2D quad (0x0011E4A0, cdecl). Skipped only for the letterbox bars above.
+ * ANI_QUAD_LOG=1 lists each call site once with its rectangle. */
+extern void sub_0011E4A0_gen(void);
+void sub_0011E4A0(void)
+{
+    if (s_in_letterbox) {
+        g_esp += 4;   /* the ret: the caller pops the arguments (cdecl) */
+        return;
+    }
+    if (getenv("ANI_QUAD_LOG")) {
+        static uint32_t seen[64];
+        static int nseen;
+        uint32_t ret = GUEST32(g_esp);
+        int i;
+        for (i = 0; i < nseen && seen[i] != ret; i++)
+            ;
+        if (i == nseen && nseen < 64) {
+            seen[nseen++] = ret;
+            fprintf(stderr, "[ANI] quad from 0x%08X: %f %f %f %f\n", ret,
+                    *(volatile float *)((uintptr_t)g_xbox_mem_offset + (uint32_t)(g_esp + 4)),
+                    *(volatile float *)((uintptr_t)g_xbox_mem_offset + (uint32_t)(g_esp + 8)),
+                    *(volatile float *)((uintptr_t)g_xbox_mem_offset + (uint32_t)(g_esp + 12)),
+                    *(volatile float *)((uintptr_t)g_xbox_mem_offset + (uint32_t)(g_esp + 16)));
+        }
+    }
+    sub_0011E4A0_gen();
+}
+
 
 recomp_func_t recomp_lookup_manual(uint32_t xbox_va)
 {

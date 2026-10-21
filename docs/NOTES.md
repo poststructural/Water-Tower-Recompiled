@@ -143,3 +143,19 @@ by symbol (the Release build now writes a PDB).
 - Profiling the Vulkan build: it writes `Animaniacs.pdb`; the GPU model has
   line tables; `-DANI_PROFILE_NOINLINE=ON` keeps its helpers out of line;
   `python scripts/sample_profile.py 10 --lines` while the game runs.
+
+### Cutscenes in widescreen (2026-10-20)
+
+- In-engine cutscene letterbox: sub_000A7C00 (per frame from sub_0009ABD0)
+  draws two black quads through the 2D quad routine 0x0011E4A0 (0..60 and
+  360..480 of 640x480) while 0x00312D84 is non-zero, sliding them by
+  0x00312D80. recomp_manual.c skips those two quads when the picture is wider
+  than 4:3; the state still advances. (sub_00109830 is the separate
+  WipeOn/WipeOff fade, not the bars.)
+- FMVs: the movie player 0x000ECF20 plays the movie inside the call, and all
+  33 movies are 640x480 4:3, so the presenter is switched to 4:3 for the call
+  (pillarbox instead of stretch).
+- Finding draw calls: ANI_QUAD_LOG=1 lists every 2D quad call site once with
+  its rectangle; RECOMP_COVER_SNAP=<prefix> plus creating <prefix>.req writes
+  a coverage snapshot (patches/ngbrecomp-0005); scripts/guest_mem.py dumps
+  and diffs guest memory of a running game.
