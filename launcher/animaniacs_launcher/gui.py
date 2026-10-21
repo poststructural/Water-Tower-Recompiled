@@ -23,7 +23,7 @@ from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
 from . import (REPO, __version__, build, config, gamefiles, gamepad, gamesettings, play,
-               profiles, updates)
+               profiles, steam, updates)
 from .gamesettings import (ASPECTS, MAX_SCALES, MODES, MSAA, RENDER_SCALES, RESOLUTIONS,
                            TEXTURE_FILTERS, VSYNC)
 
@@ -269,6 +269,8 @@ class App:
                                     wraplength=480)
         self.h_launcher.pack(anchor="w", pady=(10, 0))
         self.h_launcher.bind("<Button-1>", lambda _e: self.update_launcher())
+        self.b_steam = ttk.Button(card, text="Add to Steam", command=self.add_to_steam)
+        self.b_steam.pack(anchor="w", pady=(18, 0))
 
         prog = ttk.Frame(f, style="Panel.TFrame")
         prog.grid(row=1, column=0, columnspan=2, sticky="we", pady=(24, 0))
@@ -1126,6 +1128,18 @@ class App:
             return
         self.refresh()
 
+    def add_to_steam(self) -> None:
+        if not getattr(sys, "frozen", False):
+            messagebox.showinfo("Add to Steam", "Add to Steam works from the installed launcher "
+                                                "(AnimaniacsLauncher.exe).")
+            return
+        try:
+            msg = steam.add_to_steam(sys.executable)
+        except (steam.SteamError, OSError) as e:
+            messagebox.showerror("Add to Steam", str(e))
+            return
+        messagebox.showinfo("Add to Steam", msg)
+
     def copy_info(self) -> None:
         self.root.clipboard_clear()
         self.root.clipboard_append(play.system_info(self.st))
@@ -1152,8 +1166,19 @@ def _open_folder_file(path: str) -> None:
         subprocess.Popen(["xdg-open" if sys.platform != "darwin" else "open", path])
 
 
-def run() -> int:
+def run(smoke: bool = False) -> int:
+    """smoke: show every tab, then close (a check that the window builds)."""
     root = tk.Tk()
-    App(root)
+    app = App(root)
+    if smoke:
+        app.st.check_updates_on_start = False
+
+        def step(i: int = 0) -> None:
+            if i < len(TABS):
+                app.show_tab(i)
+                root.after(150, step, i + 1)
+            else:
+                root.destroy()
+        root.after(300, step)
     root.mainloop()
     return 0

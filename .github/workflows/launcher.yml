@@ -39,7 +39,10 @@ jobs:
       - run: python launcher/build_exe.py
       - name: Smoke test the frozen launcher
         shell: bash
-        run: launcher/dist/AnimaniacsLauncher.exe --version
+        run: |
+          launcher/dist/AnimaniacsLauncher.exe --version
+          # Opens the window, shows every tab and closes; a crash fails the step.
+          ANI_LAUNCHER_HOME="$RUNNER_TEMP/launcher-home" timeout 120 launcher/dist/AnimaniacsLauncher.exe --smoke-ui
       - uses: actions/upload-artifact@v4
         with:
           name: AnimaniacsLauncher

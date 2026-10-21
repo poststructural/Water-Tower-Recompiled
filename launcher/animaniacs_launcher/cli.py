@@ -24,6 +24,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="AnimaniacsLauncher",
                                  description="Animaniacs: The Great Edgar Hunt recomp launcher")
     ap.add_argument("--version", action="version", version=__version__)
+    ap.add_argument("--smoke-ui", action="store_true", help=argparse.SUPPRESS)
     sub = ap.add_subparsers(dest="cmd")
     s = sub.add_parser("setup", help="import your game files (folder, .iso or .zip)")
     s.add_argument("source")
@@ -37,7 +38,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.cmd:
         from . import gui
-        return gui.run()
+        return gui.run(smoke=args.smoke_ui)
 
     st = config.Settings.load()
     try:

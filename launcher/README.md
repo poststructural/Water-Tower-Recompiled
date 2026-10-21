@@ -35,7 +35,7 @@ The window has tabs like the Crackdown recomp's launcher:
 
 | Tab | What it sets |
 |---|---|
-| Home | Play, verify game files, check for updates, change the game source |
+| Home | Play, verify game files, check for updates, change the game source, Add to Steam |
 | Display | Windowed or fullscreen (borderless, monitor resolution), window size (720p to 4K, ultrawide, native, or custom), aspect ratio (auto, 4:3, 16:9, 16:10, 21:9, 32:9), v-sync, frame rate counter |
 | Graphics | Internal resolution (auto or 1x-8x), the auto limit, anti-aliasing, texture filtering |
 | Gameplay | Skip intros, close the launcher on Play |
@@ -49,6 +49,9 @@ are the ones in `docs/SETTINGS.md`; a file from the first version (width,
 height, fullscreen, widescreen) is read, and each old key is replaced by its
 new one when that setting is saved. Q / E switch tabs and Esc goes
 back; on Windows a controller works too (LB / RB tabs, D-pad, A, B).
+
+Add to Steam puts the launcher in your Steam library as a non-Steam game
+(close Steam first; the old `shortcuts.vdf` is backed up beside it).
 
 Save profiles are passed to the game as `ANI_SAVE_DIR`; the default profile
 is the game's own `%LOCALAPPDATA%\AnimaniacsRecompiled`.
