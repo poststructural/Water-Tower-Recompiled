@@ -175,3 +175,16 @@ by symbol (the Release build now writes a PDB).
 - getenv in a per-draw hook cost ~half the frame rate: debug switches in
   recomp_manual.c are read once (ANI_ENV).
 - scripts/guest_mem.py read 0x10000 too low; it now uses the logged offset.
+
+### Rumble stalls (2026-10-23)
+
+- The game's rumble call (0x0013CB60) creates an event, passes it to
+  XInputSetState and waits for the emulated USB transfer to signal it, on the
+  main thread. That wait cost a poll interval per call (30-45 fps in fights)
+  and could be lost, freezing the game (seen in level 4 at 6x render scale).
+  recomp_manual.c now sets the host controller's motors directly and returns.
+- Still open: level 4's busy areas dip to 30-45 fps at times at any scale. The
+  main thread waits in BlockOnTime on the GPU thread, which spends its time in
+  surface ownership (VirtualProtect) and surface downloads, not in drawing.
+  ANI_BLOCK_SPIN=1 (BlockOnTime polls the semaphore instead of sleeping on the
+  GPU interrupt) did not change it.

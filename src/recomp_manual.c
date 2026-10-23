@@ -185,6 +185,9 @@ void sub_0014F4C0(void)
     sub_0014F4C0_gen();
 #if !defined(ANI_NV2A_VK)   /* the NV2A model raises the interrupt */
     g_eax = 0;
+#else
+    if (ANI_ENV("ANI_BLOCK_SPIN"))
+        g_eax = 0;
 #endif
 }
 
@@ -413,6 +416,33 @@ void sub_0011E4A0(void)
         }
     }
     sub_0011E4A0_gen();
+}
+
+/*
+ * Controller rumble (0x0013CB60, cdecl: left, right motor 0..1; esi is the
+ * pad object). The game creates an event, hands XInputSetState the feedback
+ * block and waits for the USB transfer to signal it -- every call, from the
+ * main thread. On the emulated USB that wait costs a poll interval and can
+ * be missed outright, which halved the frame rate in busy scenes and froze
+ * the cliffs level. The motors are set on the host controller directly.
+ */
+extern void sub_0013CB60_gen(void);
+void sub_0013CB60(void)
+{
+#if defined(ANI_NV2A_VK)
+    extern unsigned long xbox_InputSetState(unsigned long port, const void *vibration);
+    float l, r;
+    uint16_t v[2];
+    memcpy(&l, (const void *)((uintptr_t)g_xbox_mem_offset + g_esp + 4), 4);
+    memcpy(&r, (const void *)((uintptr_t)g_xbox_mem_offset + g_esp + 8), 4);
+    l = l < 0.0f ? 0.0f : l > 1.0f ? 1.0f : l;
+    r = r < 0.0f ? 0.0f : r > 1.0f ? 1.0f : r;
+    v[0] = (uint16_t)(l * 65535.0f);
+    v[1] = (uint16_t)(r * 65535.0f);
+    xbox_InputSetState(0, v);
+#endif
+    g_esp += 4;   /* the ret: the caller pops the arguments (cdecl) */
+    g_eax = 0;
 }
 
 /*
