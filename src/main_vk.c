@@ -72,7 +72,7 @@ static void ani_mkdirs(const char *path)
 
 /* ── Crash reporting ───────────────────────────────────────── */
 
-static void print_host_symbol(void *rip)
+static void print_host_symbol(FILE *out, void *rip)
 {
 #if defined(_WIN32)
     char buf[sizeof(SYMBOL_INFO) + 256];
@@ -83,13 +83,14 @@ static void print_host_symbol(void *rip)
     sym->SizeOfStruct = sizeof(SYMBOL_INFO);
     sym->MaxNameLen = 255;
     if (SymFromAddr(GetCurrentProcess(), (DWORD64)(uintptr_t)rip, &disp, sym))
-        fprintf(stderr, "  in %s+0x%llX\n", sym->Name, (unsigned long long)disp);
+        fprintf(out, "  in %s+0x%llX\n", sym->Name, (unsigned long long)disp);
 #else
+    (void)out;
     (void)rip;
 #endif
 }
 
-static void print_guest_stack(void)
+static void print_guest_stack(FILE *out)
 {
     const uint32_t *sp;
     int i, shown = 0;
@@ -97,11 +98,11 @@ static void print_guest_stack(void)
     if (!g_xbox_mem_offset || !g_esp)
         return;
     sp = (const uint32_t *)((uintptr_t)g_xbox_mem_offset + g_esp);
-    fprintf(stderr, "  guest stack (return addresses, innermost first):\n");
+    fprintf(out, "  guest stack (return addresses, innermost first):\n");
     for (i = 0; i < 256 && shown < 24; i++) {
         uint32_t v = sp[i];
         if (v > g_xbox_code_lo && v < g_xbox_code_hi) {
-            fprintf(stderr, "    [esp+%-4d] 0x%08X\n", i * 4, v);
+            fprintf(out, "    [esp+%-4d] 0x%08X\n", i * 4, v);
             shown++;
         }
     }
@@ -147,10 +148,61 @@ static LONG CALLBACK veh_handler(PEXCEPTION_POINTERS ep)
     fprintf(stderr, "  Xbox regs: eax=%08X ecx=%08X edx=%08X ebx=%08X\n",
             g_eax, g_ecx, g_edx, g_ebx);
     fprintf(stderr, "             esi=%08X edi=%08X esp=%08X\n", g_esi, g_edi, g_esp);
-    print_host_symbol((void *)(uintptr_t)ep->ContextRecord->Rip);
-    print_guest_stack();
+    print_host_symbol(stderr, (void *)(uintptr_t)ep->ContextRecord->Rip);
+    print_guest_stack(stderr);
     fflush(stderr);
     return EXCEPTION_CONTINUE_SEARCH;
+}
+
+static void save_dir_path(char *out, size_t n);
+
+/* Nothing handled the exception: the game is going down. Write crash.txt
+ * beside log.txt, say where it is, and end the process. */
+static LONG WINAPI crash_filter(PEXCEPTION_POINTERS ep)
+{
+    static volatile LONG once;
+    char path[4200], msg[4600];
+    FILE *f;
+
+    if (InterlockedExchange(&once, 1))
+        return EXCEPTION_EXECUTE_HANDLER;
+    save_dir_path(path, sizeof path - 16);
+    strcat(path, "/crash.txt");
+    f = fopen(path, "w");
+    if (f) {
+        SYSTEMTIME t;
+        GetLocalTime(&t);
+        fprintf(f, "Animaniacs Recompiled %s crashed, %04d-%02d-%02d %02d:%02d:%02d\n\n",
+                ANI_VERSION, t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
+        fprintf(f, "Exception 0x%08lX at 0x%llX",
+                ep->ExceptionRecord->ExceptionCode,
+                (unsigned long long)ep->ContextRecord->Rip);
+        if (ep->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) {
+            uintptr_t a = ep->ExceptionRecord->ExceptionInformation[1];
+            fprintf(f, ", %s of 0x%llX",
+                    ep->ExceptionRecord->ExceptionInformation[0] ? "write" : "read",
+                    (unsigned long long)a);
+            if (a - (uintptr_t)g_xbox_mem_offset < 0x10000000u)
+                fprintf(f, " (Xbox 0x%08X)", (uint32_t)(a - (uintptr_t)g_xbox_mem_offset));
+        }
+        fprintf(f, "\n");
+        print_host_symbol(f, (void *)(uintptr_t)ep->ContextRecord->Rip);
+        fprintf(f, "  Xbox regs: eax=%08X ecx=%08X edx=%08X ebx=%08X\n",
+                g_eax, g_ecx, g_edx, g_ebx);
+        fprintf(f, "             esi=%08X edi=%08X esp=%08X\n", g_esi, g_edi, g_esp);
+        print_guest_stack(f);
+        fprintf(f, "\nPlease attach this file and log.txt (same folder) to a bug report.\n");
+        fclose(f);
+    }
+    fprintf(stderr, "[CRASH] report written to %s\n", path);
+    fflush(stderr);
+    snprintf(msg, sizeof msg,
+             "The game crashed and has to close.\n\n"
+             "A report was saved to:\n%s\n\n"
+             "Please attach it and log.txt from the same folder to a bug report.",
+             path);
+    MessageBoxA(NULL, msg, "Animaniacs Recompiled", MB_OK | MB_ICONERROR);
+    return EXCEPTION_EXECUTE_HANDLER;
 }
 
 /* ── Paths ─────────────────────────────────────────────────── */
@@ -414,7 +466,8 @@ int main(int argc, char **argv)
         exe_dir(s_game_dir, sizeof s_game_dir);
         strncat(s_game_dir, "game", sizeof s_game_dir - strlen(s_game_dir) - 1);
     }
-    printf("=== Animaniacs: The Great Edgar Hunt - Static Recompilation (Vulkan) ===\n");
+    printf("=== Animaniacs: The Great Edgar Hunt - Static Recompilation %s (Vulkan) ===\n",
+           ANI_VERSION);
     printf("Game directory: %s\n", s_game_dir);
 
     {
@@ -434,6 +487,7 @@ int main(int argc, char **argv)
     SymInitialize(GetCurrentProcess(), NULL, TRUE);
 #endif
     AddVectoredExceptionHandler(1, veh_handler);
+    SetUnhandledExceptionFilter(crash_filter);
 
     if (!s_headless) {
         int win_w, win_h;

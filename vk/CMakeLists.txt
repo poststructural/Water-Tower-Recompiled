@@ -15,7 +15,7 @@ cmake_minimum_required(VERSION 3.20)
 #   TK=tools/ngbrecomp/xboxrecomp scripts/regen.sh
 # ============================================================================
 
-project(animaniacs_vk C CXX)
+project(animaniacs_vk VERSION 1.0.0 LANGUAGES C CXX)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -74,7 +74,8 @@ add_executable(${PROJECT_NAME}
     ${ANI_ROOT}/src/settings.c
     ${ANI_ROOT}/src/recomp_manual.c
     $<TARGET_OBJECTS:ani_gen>)
-target_compile_definitions(${PROJECT_NAME} PRIVATE ANI_NV2A_VK)
+target_compile_definitions(${PROJECT_NAME} PRIVATE ANI_NV2A_VK
+    ANI_VERSION="${PROJECT_VERSION}")
 target_link_libraries(${PROJECT_NAME} PRIVATE xboxrecomp xbox_nv2a_vk)
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${ANI_ROOT}/src
