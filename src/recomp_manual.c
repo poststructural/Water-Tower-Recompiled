@@ -141,8 +141,15 @@ static void ani_register_gpu_semaphore(void)
 extern void sub_0014FA40_gen(void);
 void sub_0014FA40(void)
 {
+#if defined(ANI_NV2A_VK)
+    extern void nv2a_trace(char);
+    nv2a_trace('B');
+#endif
     ani_register_gpu_semaphore();
     sub_0014FA40_gen();
+#if defined(ANI_NV2A_VK)
+    nv2a_trace('b');
+#endif
 }
 
 /* D3D KickOff (0x0014F860). Register the semaphore here too, before the

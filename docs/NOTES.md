@@ -183,8 +183,13 @@ by symbol (the Release build now writes a PDB).
   main thread. That wait cost a poll interval per call (30-45 fps in fights)
   and could be lost, freezing the game (seen in level 4 at 6x render scale).
   recomp_manual.c now sets the host controller's motors directly and returns.
-- Still open: level 4's busy areas dip to 30-45 fps at times at any scale. The
-  main thread waits in BlockOnTime on the GPU thread, which spends its time in
-  surface ownership (VirtualProtect) and surface downloads, not in drawing.
-  ANI_BLOCK_SPIN=1 (BlockOnTime polls the semaphore instead of sleeping on the
-  GPU interrupt) did not change it.
+- Level 4's busy areas dipped to 25-45 fps and the river level (3) looked
+  640x480: both levels draw parts of the frame through smaller clip
+  rectangles on the screen buffer, and the fork chose the render scale by the
+  clip (>= 640x448), so that buffer flipped between 1x and 3x -- recreated and
+  written back each time, and shown at 1x. patches/ngbrecomp-0006 also counts a
+  linear target whose rows are >= 640 pixels as the screen. Both levels now
+  hold 60 fps at full resolution (also at 6x). NV2A_SCALE_LOG=1 lists each
+  target shape and its scale.
+- NV2A_TRACE=<seconds> prints a timeline of 4000 frame events from that time
+  on (V vblank, F flip, S/s GPU flip stall, B/b the game's BlockOnTime).

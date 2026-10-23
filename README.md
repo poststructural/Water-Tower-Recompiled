@@ -2,28 +2,39 @@
 
 A static recompilation of the original Xbox release of *Animaniacs: The Great
 Edgar Hunt* (Ignition / Warthog, 2005) into a native executable, built on
-[xboxrecomp](https://github.com/sp00nznet/xboxrecomp). Windows (MSVC + D3D11)
-is the primary target; Linux and macOS go through xboxrecomp's SDL2/OpenGL
-back end.
+[xboxrecomp](https://github.com/sp00nznet/xboxrecomp). Windows is the
+first target; Linux and macOS follow.
 
 **No game files are included.** You need your own copy of the game.
 
-## Status
+## Status: 1.0 (Windows)
 
-Boots and plays on Windows: splash movies, intro, the 3D frontend, saving
-and loading, and the first level (the Warner lot) with Yakko under control.
-See [docs/NOTES.md](docs/NOTES.md) for the bring-up log.
+The whole game plays on Windows through the Vulkan build: the intro movies,
+the frontend, saving and loading, the Warner lot hub and all five levels, at
+60 fps.
 
-Two builds of the same recompiled game:
+- Any output resolution up to 4K, windowed or fullscreen, with an internal
+  render scale chosen to match (up to 6x the console's 640x480).
+- Widescreen (Hor+) from 16:10 to 32:9 in the levels; the HUD and menu text
+  keep their shape; in-engine cutscenes without letterbox bars; the movies and
+  the frontend's painted 4:3 stage shown at 4:3.
+- Controllers through SDL (Xbox, PlayStation, Switch and others) with rumble,
+  and the keyboard.
+- `settings.ini` for everything ([docs/SETTINGS.md](docs/SETTINGS.md)); a
+  crash writes `crash.txt` beside `log.txt`.
+
+Linux and macOS are next.
+
+Two builds of the same recompiled game exist:
 
 | | MSVC build (`CMakeLists.txt`) | Vulkan build (`vk/`) |
 |---|---|---|
 | Runtime | [xboxrecomp](https://github.com/sp00nznet/xboxrecomp) upstream | [ngbrecomp](https://github.com/gamboozino/ngbrecomp)'s xboxrecomp fork |
 | GPU | CPU pushbuffer rasteriser | xemu's NV2A model on Vulkan |
-| Speed | menus ~7-10 fps, level load ~12 min | 60 fps menus, ~40 fps in level, load under a minute |
+| Speed | menus ~7-10 fps, level load ~12 min | 60 fps |
 | Compiler | MSVC | llvm-mingw (clang) |
 
-The Vulkan build is the one to play.
+The Vulkan build is the one to play; the MSVC build is kept as a reference.
 
 ## The game binary
 
@@ -43,9 +54,10 @@ is used as the reference input, and either region's data runs.
 
 ## Building
 
-Requirements: Python 3.10+ with `capstone`, CMake 3.20+, Visual Studio 2022+
-(C workload) on Windows. Optional: Ghidra 12.x and a 64-bit JDK 21 for
-function naming.
+Requirements: Python 3.10+ with `capstone`, CMake 3.20+. The Vulkan build
+needs llvm-mingw (fetched by `scripts/setup_vk.sh`); the MSVC build needs
+Visual Studio 2022+. Optional: Ghidra 12.x and a 64-bit JDK 21 for function
+naming (the game builds and plays the same without it).
 
 ```bash
 git clone --recursive https://github.com/Unowa001/AnimaniacsRecompiled.git
@@ -88,7 +100,8 @@ overrides). `settings.ini` is written beside the exe on first run: windowed or f
 output resolution (1080p, 1440p, 4K, ultrawide), aspect ratio (4:3 to 32:9,
 or auto), render scale (auto matches the output), MSAA, texture filtering and
 `skip_intro`. Every key is listed in [docs/SETTINGS.md](docs/SETTINGS.md).
-F11 / Alt+Enter toggles fullscreen and F10 shows the frame rate.
+F11 / Alt+Enter toggles fullscreen and F10 shows the frame rate. Controller
+and keyboard keys are in [docs/CONTROLS.md](docs/CONTROLS.md).
 
 Test switches: `ANI_LEVEL=N` (1-5) loads level N instead of the hub;
 `RECOMP_AUDIO_WAV=out.wav` records the audio output.
@@ -114,3 +127,10 @@ scripts/regen.sh        the full XBE -> C pipeline
   Jython, so the toolkit's `ExportXbeNames.py` post-script aborts. This adds a
   Java port (functions + symbols export) and makes it the default.
   `scripts/regen.sh` applies it automatically.
+
+## Licenses
+
+Third-party parts and their licenses are listed in
+[THIRD_PARTY.md](THIRD_PARTY.md); a built game folder carries it with the
+license texts. *Animaniacs: The Great Edgar Hunt* belongs to its rights
+holders; no game data is included here.

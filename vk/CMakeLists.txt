@@ -113,6 +113,20 @@ if(WIN32)
     endif()
 endif()
 
+# The notices and license texts travel with the game folder.
+set(_xr ${ANI_ROOT}/tools/ngbrecomp/xboxrecomp)
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:${PROJECT_NAME}>/licenses
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ANI_ROOT}/THIRD_PARTY.md
+        $<TARGET_FILE_DIR:${PROJECT_NAME}>/THIRD_PARTY.md
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${_xr}/LICENSE
+        $<TARGET_FILE_DIR:${PROJECT_NAME}>/licenses/xboxrecomp-LICENSE.txt
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${_xr}/NOTICE
+        $<TARGET_FILE_DIR:${PROJECT_NAME}>/licenses/xboxrecomp-NOTICE.txt
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${_xr}/LICENSES/LGPL-2.1.txt
+        $<TARGET_FILE_DIR:${PROJECT_NAME}>/licenses/LGPL-2.1.txt
+    VERBATIM)
+
 # Profiling aid: ANI_PROFILE_NOINLINE=ON keeps the GPU model's helpers out of
 # line, so a sample lands in the function that is actually hot.
 option(ANI_PROFILE_NOINLINE "No inlining in the GPU model (profiling)" OFF)

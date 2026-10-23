@@ -1,0 +1,136 @@
+diff --git a/xboxrecomp/src/nv2a_vk/host/nv2a_host.c b/xboxrecomp/src/nv2a_vk/host/nv2a_host.c
+index 1897536..1916b41 100644
+--- a/xboxrecomp/src/nv2a_vk/host/nv2a_host.c
++++ b/xboxrecomp/src/nv2a_vk/host/nv2a_host.c
+@@ -545,6 +545,36 @@ void nv2a_vk_set_display_mode(uint32_t mode, uint32_t format, uint32_t pitch,
+ 
+ static double s_refresh_hz = 60.0;
+ volatile unsigned nv2a_pcrtc_start_writes;
++
++/* NV2A_TRACE=<seconds>: from that long after start, record 4000 frame events
++ * (a one-letter tag each, from any thread) and print them with their times:
++ * a timeline for frame-pacing problems. */
++void nv2a_trace(char tag)
++{
++    static int state = -1;   /* -1 unread, 0 off, 1 on */
++    static int64_t from_us;
++    static int64_t t[4000];
++    static char tags[4000];
++    static volatile int n;
++    int i;
++    if (state < 0) {
++        const char *e = getenv("NV2A_TRACE");
++        state = e != NULL;
++        from_us = g_get_monotonic_time() + (e ? atoi(e) : 0) * 1000000LL;
++    }
++    if (!state || g_get_monotonic_time() < from_us)
++        return;
++    i = __atomic_fetch_add(&n, 1, __ATOMIC_ACQ_REL);
++    if (i < 4000) {
++        t[i] = g_get_monotonic_time();
++        tags[i] = tag;
++    }
++    if (i == 3999) {
++        for (int j = 0; j < 4000; j++)
++            fprintf(stderr, "[TRACE] %10.3f %c\n", (t[j] - t[0]) / 1000.0, tags[j]);
++        state = 0;
++    }
++}
+ /* When the last vblank began (g_get_monotonic_time); the renderer paces
+  * its early presents from it. */
+ volatile int64_t nv2a_vblank_us;
+@@ -757,6 +787,7 @@ static void *vblank_thread(void *unused)
+ 
+         unsigned flips = __atomic_load_n(&nv2a_pcrtc_start_writes,
+                                          __ATOMIC_ACQUIRE);
++        nv2a_trace('V');
+         bql_lock();
+         d->pcrtc.pending_interrupts |= NV_PCRTC_INTR_0_VBLANK;
+         d->pcrtc.raster = 0;
+diff --git a/xboxrecomp/src/nv2a_vk/xemu/pcrtc.c b/xboxrecomp/src/nv2a_vk/xemu/pcrtc.c
+index 73c79e8..75d42f9 100644
+--- a/xboxrecomp/src/nv2a_vk/xemu/pcrtc.c
++++ b/xboxrecomp/src/nv2a_vk/xemu/pcrtc.c
+@@ -70,6 +70,7 @@ void pcrtc_write(void *opaque, hwaddr addr, uint64_t val, unsigned int size)
+         {
+             extern volatile unsigned nv2a_pcrtc_start_writes;
+             __atomic_add_fetch(&nv2a_pcrtc_start_writes, 1, __ATOMIC_RELEASE);
++            { extern void nv2a_trace(char); nv2a_trace('F'); }
+         }
+ 
+         NV2A_DPRINTF("PCRTC_START - %x %x %x %x\n",
+diff --git a/xboxrecomp/src/nv2a_vk/xemu/pgraph/vk/renderer.c b/xboxrecomp/src/nv2a_vk/xemu/pgraph/vk/renderer.c
+index 363a32d..446a1ee 100644
+--- a/xboxrecomp/src/nv2a_vk/xemu/pgraph/vk/renderer.c
++++ b/xboxrecomp/src/nv2a_vk/xemu/pgraph/vk/renderer.c
+@@ -362,7 +362,10 @@ static void pgraph_vk_process_pending(NV2AState *d)
+ 
+ static void pgraph_vk_flip_stall(NV2AState *d)
+ {
++    extern void nv2a_trace(char);
++    nv2a_trace('S');
+     pgraph_vk_finish(&d->pgraph, VK_FINISH_REASON_FLIP_STALL);
++    nv2a_trace('s');
+     early_present(d);
+     pgraph_vk_debug_frame_terminator();
+ }
+diff --git a/xboxrecomp/src/nv2a_vk/xemu/pgraph/vk/surface.c b/xboxrecomp/src/nv2a_vk/xemu/pgraph/vk/surface.c
+index 710dbb7..df20633 100644
+--- a/xboxrecomp/src/nv2a_vk/xemu/pgraph/vk/surface.c
++++ b/xboxrecomp/src/nv2a_vk/xemu/pgraph/vk/surface.c
+@@ -1702,6 +1702,28 @@ void pgraph_vk_surface_update(NV2AState *d, bool upload, bool color_write,
+                 bool big = pg->surface_shape.clip_width >= 640 &&
+                            pg->surface_shape.clip_height >= 448 &&
+                            pg->surface_type != NV097_SET_SURFACE_FORMAT_TYPE_SWIZZLE;
++                /* Animaniacs draws parts of its frame through smaller clip
++                 * rectangles on the same screen buffer; judged by the clip,
++                 * that buffer dropped to 1x and the whole picture with it.
++                 * A linear target whose rows are display-wide is the screen
++                 * whatever the clip. */
++                if (!big && pg->surface_type != NV097_SET_SURFACE_FORMAT_TYPE_SWIZZLE) {
++                    unsigned bpp = 0, pitch = 0;
++                    if (color_write && pg->surface_shape.color_format &&
++                        pg->surface_shape.color_format <
++                            ARRAY_SIZE(kelvin_surface_color_format_map)) {
++                        bpp = kelvin_surface_color_format_map
++                                  [pg->surface_shape.color_format].bytes_per_pixel;
++                        pitch = pg->surface_color.pitch;
++                    } else if (zeta_write && pg->surface_shape.zeta_format &&
++                               pg->surface_shape.zeta_format <
++                                   ARRAY_SIZE(kelvin_surface_zeta_format_map)) {
++                        bpp = kelvin_surface_zeta_format_map
++                                  [pg->surface_shape.zeta_format].bytes_per_pixel;
++                        pitch = pg->surface_zeta.pitch;
++                    }
++                    big = bpp && pitch / bpp >= 640;
++                }
+                 unsigned int want = (big && user > 1) ? user : 1;
+                 /* xboxrecomp: a small depth-only target is a shadow map
+                  * (Ninja Gaiden Black renders Ryu's shadow into 128x128);
+@@ -1714,6 +1736,26 @@ void pgraph_vk_surface_update(NV2AState *d, bool upload, bool color_write,
+                     }
+                     want = pgraph_vk_shadow_scale;
+                 }
++                static int scale_log = -1;
++                if (scale_log < 0)
++                    scale_log = getenv("NV2A_SCALE_LOG") != NULL;
++                if (scale_log) {
++                    static uint32_t seen[64];
++                    static int nseen;
++                    uint32_t k = pg->surface_shape.clip_width << 20 ^
++                                 pg->surface_shape.clip_height << 8 ^
++                                 pg->surface_type << 4 ^ want;
++                    int i;
++                    for (i = 0; i < nseen && seen[i] != k; i++)
++                        ;
++                    if (i == nseen && nseen < 64) {
++                        seen[nseen++] = k;
++                        fprintf(stderr, "[SCALE] target %ux%u at %u,%u type %u color %d zeta %d: %ux\n",
++                                pg->surface_shape.clip_width, pg->surface_shape.clip_height,
++                                pg->surface_shape.clip_x, pg->surface_shape.clip_y,
++                                pg->surface_type, color_write, zeta_write, want);
++                    }
++                }
+                 if (want != pg->surface_scale_factor) {
+                     pgraph_vk_ensure_not_in_render_pass(pg);
+                     pg->surface_scale_factor = want;
