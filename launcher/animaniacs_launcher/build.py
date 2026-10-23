@@ -285,17 +285,59 @@ def dll_dirs() -> list[str]:
     return dirs
 
 
+# Free space a build needs: the first one also downloads the toolchain and
+# libraries and generates ~40 MB of C; later ones rebuild in place.
+FIRST_BUILD_GB = 15
+UPDATE_GB = 4
+
+
+def check_space(path: str | None = None) -> None:
+    root = path or config.data_dir()
+    os.makedirs(root, exist_ok=True)
+    first = not os.path.isdir(os.path.join(config.sub("windeps"), "sysroot"))
+    need = FIRST_BUILD_GB if first else UPDATE_GB
+    free = shutil.disk_usage(root).free / 1e9
+    if free < need:
+        raise BuildError(f"the build needs about {need} GB free on {os.path.splitdrive(root)[0] or root}; "
+                         f"there are {free:.1f} GB")
+
+
+def build_log_path(version) -> str:
+    os.makedirs(config.sub("logs"), exist_ok=True)
+    return config.sub("logs", time.strftime(f"build-{version.name}-%Y%m%d-%H%M%S.txt"))
+
+
 def build(version, game_dir: str, settings: config.Settings, log: Log,
           cancelled: Callable[[], bool] = lambda: False,
           step: Callable[[str], None] = lambda s: None) -> str:
     """Build `version` (an updates.GameVersion) and install it. Returns the
-    installed build's folder."""
+    installed build's folder. The whole log also goes to logs/build-*.txt."""
     why = supported()
     if why:
         raise BuildError(why)
     tc = detect()
     if not tc.git or not tc.bash:
         raise BuildError("missing: " + ", ".join(tc.missing))
+    check_space()
+    path = build_log_path(version)
+    with open(path, "w", encoding="utf-8", errors="replace") as f:
+        def both(line: str) -> None:
+            f.write(line + "\n")
+            f.flush()
+            log(line)
+        both(f"== Building {version.name} ({version.sha}) from {game_dir}")
+        try:
+            return _build(version, game_dir, settings, both, cancelled, step, tc)
+        except Cancelled:
+            both("== cancelled")
+            raise
+        except BuildError as e:
+            both(f"error: {e}")
+            raise BuildError(f"{e} (full log: {path})") from e
+
+
+def _build(version, game_dir: str, settings: config.Settings, log: Log,
+           cancelled: Callable[[], bool], step: Callable[[str], None], tc: Toolchain) -> str:
     r = Runner(log, cancelled)
     started = time.time()
 

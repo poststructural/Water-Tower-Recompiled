@@ -26,6 +26,7 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\AnimaniacsLauncher.exe
+SetupIconFile=..\animaniacs_launcher\assets\icon.ico
 CloseApplications=yes
 
 [Tasks]

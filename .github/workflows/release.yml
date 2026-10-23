@@ -1,0 +1,29 @@
+name: Release
+
+# A version tag (v1.0.0, v1.1.0-rc1, ...) publishes a GitHub release with
+# notes from the commits since the last one. Installed launchers on the
+# Releases channel then build it on their next update check. Pre-release
+# tags (with a "-") are marked as pre-releases, which launchers skip unless
+# "Include pre-releases" is on. Launcher releases use launcher-v* tags
+# (.github/workflows/launcher.yml).
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: Animaniacs Recompiled ${{ github.ref_name }}
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          body: |
+            Build it with the launcher (Updates tab), or from source as in the README.
+            No game files are included: you need your own copy of the game.

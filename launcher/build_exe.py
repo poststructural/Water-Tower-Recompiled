@@ -19,7 +19,10 @@ def main() -> int:
     os.chdir(HERE)
     subprocess.check_call([
         sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onefile",
-        "--windowed", "--name", "AnimaniacsLauncher", "run_launcher.py"])
+        "--windowed", "--name", "AnimaniacsLauncher",
+        "--icon", os.path.join("animaniacs_launcher", "assets", "icon.ico"),
+        "--add-data", os.pathsep.join([os.path.join("animaniacs_launcher", "assets")] * 2),
+        "run_launcher.py"])
     iscc = shutil.which("iscc") or r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
     if sys.platform == "win32" and os.path.isfile(iscc):
         subprocess.check_call([iscc, f"/DAppVersion={__version__}",

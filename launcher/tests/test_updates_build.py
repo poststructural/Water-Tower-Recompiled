@@ -104,3 +104,34 @@ def test_update_keeps_settings_ini(tmp_path):
     # Rebuilding the current build keeps it too.
     again = build.install(updates.GameVersion("v2", "x", "y", "release"), str(bdir), carry_from="v2")
     assert open(os.path.join(again, "settings.ini")).read() == "fullscreen=1\n"
+
+
+def test_build_writes_a_log_and_checks_space(monkeypatch):
+    import collections
+    import pytest
+    monkeypatch.setattr(build, "supported", lambda: None)
+    monkeypatch.setattr(build, "detect", lambda: build.Toolchain("git", "bash", ["py"], True))
+    Usage = collections.namedtuple("Usage", "total used free")
+    monkeypatch.setattr(build.shutil, "disk_usage", lambda p: Usage(0, 0, 2e9))
+    v = updates.GameVersion("main-abc", "x", "abc", "main")
+    with pytest.raises(build.BuildError, match="needs about 15 GB"):
+        build.build(v, "g", config.Settings(), log=lambda s: None)
+
+    monkeypatch.setattr(build.shutil, "disk_usage", lambda p: Usage(0, 0, 100e9))
+
+    def fail(version, game_dir, settings, log, cancelled, step, tc):
+        log("compiling...")
+        raise build.BuildError("ninja failed (exit code 1)")
+    monkeypatch.setattr(build, "_build", fail)
+    with pytest.raises(build.BuildError, match="full log") as e:
+        build.build(v, "g", config.Settings(), log=lambda s: None)
+    logs = [n for n in os.listdir(config.sub("logs")) if n.startswith("build-main-abc")]
+    text = open(config.sub("logs", logs[0])).read()
+    assert "compiling..." in text and "ninja failed" in text and logs[0] in str(e.value)
+
+    def cancel(*a):
+        raise build.Cancelled("cancelled")
+    monkeypatch.setattr(build, "_build", cancel)
+    with pytest.raises(build.Cancelled) as e:
+        build.build(v, "g", config.Settings(), log=lambda s: None)
+    assert str(e.value) == "cancelled"

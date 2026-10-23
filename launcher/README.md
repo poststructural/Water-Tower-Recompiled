@@ -68,6 +68,14 @@ The launcher offers to install both with `winget`. It puts the build's Python
 tools (capstone, cmake, ninja, pkgconf) in its own venv. Ghidra is optional
 (function names in crash logs; set its folder in Settings).
 
+A first build needs about 15 GB free on the launcher's drive (toolchain,
+checkout and build tree) and an update about 4 GB; the launcher checks before
+it starts. Every build writes its whole output to `logs/build-*.txt`, and a
+failed build names that file.
+
+Windows SmartScreen may warn about the installer because it is not code
+signed: choose More info, then Run anyway.
+
 ## Where things go
 
 `%LOCALAPPDATA%\AnimaniacsRecompiled\launcher` (`ANI_LAUNCHER_HOME` overrides):
@@ -77,8 +85,10 @@ Uninstalling removes that folder and keeps your saves.
 
 ## Releasing
 
-- Game: publish a GitHub release with a version tag (`v0.2.0`). Launchers on
-  the Releases channel build it on their next update check.
+- Game: push a version tag (`v1.0.0`; `v1.1.0-rc1` for a pre-release).
+  `.github/workflows/release.yml` publishes the release with generated
+  notes, and launchers on the Releases channel build it on their next
+  update check.
 - Launcher: bump `__version__` in `animaniacs_launcher/__init__.py` and push
   a `launcher-v<version>` tag. CI (`.github/workflows/launcher.yml`) builds
   the installer and attaches it to that release.

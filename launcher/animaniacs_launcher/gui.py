@@ -1169,6 +1169,11 @@ def _open_folder_file(path: str) -> None:
 def run(smoke: bool = False) -> int:
     """smoke: show every tab, then close (a check that the window builds)."""
     root = tk.Tk()
+    try:
+        icon = tk.PhotoImage(file=os.path.join(os.path.dirname(__file__), "assets", "icon.png"))
+        root.iconphoto(True, icon)
+    except tk.TclError:
+        pass
     app = App(root)
     if smoke:
         app.st.check_updates_on_start = False
