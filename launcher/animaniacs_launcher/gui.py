@@ -24,7 +24,7 @@ from tkinter.scrolledtext import ScrolledText
 
 from . import (REPO, __version__, build, config, gamefiles, gamepad, gamesettings, play,
                profiles, steam, updates)
-from .gamesettings import (ASPECTS, MAX_SCALES, MODES, MSAA, RENDER_SCALES, RESOLUTIONS,
+from .gamesettings import (ASPECTS, HUDS, MAX_SCALES, MODES, MSAA, RENDER_SCALES, RESOLUTIONS,
                            TEXTURE_FILTERS, VSYNC)
 
 CHANNELS = {"release": "Releases", "main": "Latest main (newest commit)"}
@@ -302,8 +302,8 @@ class App:
     def _display(self) -> ttk.Frame:
         f = self._page()
         self._heading(f, "Display", "Fullscreen uses your monitor's resolution. A wider aspect "
-                                    "ratio shows more of the world at the sides; the menus and HUD "
-                                    "stretch to fit.")
+                                    "ratio shows more of the world at the sides; the main menus "
+                                    "and movies stay 4:3.")
         self.mode = Choice(f, MODES, command=lambda: (self._set("display.mode", self.mode.get()),
                                                       self._mode_shown()))
         self._row(f, "Mode", self.mode.box, "F11 / Alt+Enter")
@@ -322,6 +322,8 @@ class App:
         self.cust = (cust, self._row(f, "Custom size", cust))
         self.aspect = Choice(f, ASPECTS, command=lambda: self._set("display.aspect", self.aspect.get()))
         self._row(f, "Aspect ratio", self.aspect.box)
+        self.hud = Choice(f, HUDS, command=lambda: self._set("display.hud", self.hud.get()))
+        self._row(f, "HUD and menu text", self.hud.box, "on wide pictures")
         self.vsync = Choice(f, VSYNC, command=lambda: self._set("display.vsync", self.vsync.get()))
         self._row(f, "V-sync", self.vsync.box)
         self.fps = tk.BooleanVar()
@@ -597,6 +599,7 @@ class App:
         self.height.set(h if h.isdigit() else "1080")
         self.mode.set(self._v("display.mode"))
         self.aspect.set(self._v("display.aspect"))
+        self.hud.set(self._v("display.hud"))
         self.vsync.set(self._v("display.vsync"))
         self.fps.set(self._v("display.show_fps") == "on")
         self.scale.set(self._v("graphics.render_scale"))

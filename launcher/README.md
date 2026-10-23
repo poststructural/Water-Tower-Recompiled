@@ -36,7 +36,7 @@ The window has tabs like the Crackdown recomp's launcher:
 | Tab | What it sets |
 |---|---|
 | Home | Play, verify game files, check for updates, change the game source, Add to Steam |
-| Display | Windowed or fullscreen (borderless, monitor resolution), window size (720p to 4K, ultrawide, native, or custom), aspect ratio (auto, 4:3, 16:9, 16:10, 21:9, 32:9), v-sync, frame rate counter |
+| Display | Windowed or fullscreen (borderless, monitor resolution), window size (720p to 4K, ultrawide, native, or custom), aspect ratio (auto, 4:3, 16:9, 16:10, 21:9, 32:9), HUD and menu text (keep 4:3 or stretch), v-sync, frame rate counter |
 | Graphics | Internal resolution (auto or 1x-8x), the auto limit, anti-aliasing, texture filtering |
 | Gameplay | Skip intros, close the launcher on Play |
 | Saves | Save profiles (each its own save folder), open or back up saves |

@@ -108,3 +108,11 @@ def test_system_info_has_settings(tmp_path):
     (tmp_path / "settings.ini").write_text("; c\n[display]\nwidth = 1920\n")
     info = play.system_info(config.Settings(custom_exe=str(exe)))
     assert "width = 1920" in info and "; c" not in info
+
+
+def test_hud_option_defaults_and_saves():
+    ini = gamesettings.IniFile(gamesettings.FALLBACK_TEMPLATE)
+    assert gamesettings.value(ini, "display.hud") == "4:3"
+    gamesettings.apply(ini, {"display.hud": "stretch"})
+    assert ini.get("display", "hud") == "stretch"
+    assert gamesettings.value(gamesettings.IniFile("[display]\n"), "display.hud") == "4:3"

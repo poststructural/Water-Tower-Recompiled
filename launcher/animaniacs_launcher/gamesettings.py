@@ -36,6 +36,9 @@ resolution = 1920x1080
 ; Picture shape: 4:3 (original), 16:9, 16:10, 21:9, 32:9, or auto (the
 ; monitor's). Wider shapes show more of the world at the sides.
 aspect = auto
+; HUD and menu text on a wide picture: 4:3 (original shape, kept to the
+; sides and centre) or stretch (spread across the width)
+hud = 4:3
 ; on (no tearing), off, or adaptive
 vsync = on
 ; on shows the frame rate (F10 toggles it in game)
@@ -72,6 +75,7 @@ OPTIONS = {o.section + "." + o.key: o for o in [
     Option("display", "mode", "windowed", "Mode"),
     Option("display", "resolution", "1920x1080", "Resolution"),
     Option("display", "aspect", "auto", "Aspect ratio"),
+    Option("display", "hud", "4:3", "HUD and menu text"),
     Option("display", "vsync", "on", "V-sync"),
     Option("display", "show_fps", "off", "Show frame rate"),
     Option("graphics", "render_scale", "auto", "Internal resolution"),
@@ -100,6 +104,7 @@ RESOLUTIONS = [
 ]
 ASPECTS = [("auto", "Auto (window or monitor shape)"), ("4:3", "4:3  (original)"),
            ("16:9", "16:9"), ("16:10", "16:10"), ("21:9", "21:9"), ("32:9", "32:9")]
+HUDS = [("4:3", "Keep 4:3 shape"), ("stretch", "Stretch to the width")]
 VSYNC = [("on", "On"), ("adaptive", "Adaptive"), ("off", "Off")]
 RENDER_SCALES = [("auto", "Auto (matches the output resolution)")] + [
     (str(n), f"{n}x  ({640 * n} x {480 * n})") for n in range(1, 9)]
