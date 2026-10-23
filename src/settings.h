@@ -12,6 +12,7 @@ typedef struct AniSettings {
     double aspect;          /* picture shape; 0 = the monitor's */
     int vsync;              /* 0 off, 1 on, 2 adaptive */
     int show_fps;
+    int hud_stretch;        /* 0 = 2D keeps its 4:3 shape on wide pictures */
     /* [graphics] */
     int render_scale;       /* 0 = auto: enough for the output resolution */
     int max_render_scale;   /* cap for auto */

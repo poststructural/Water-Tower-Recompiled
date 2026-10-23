@@ -22,9 +22,8 @@ def base():
     if os.environ.get("ANI_MEM_BASE"):
         return int(os.environ["ANI_MEM_BASE"], 16)
     log = os.path.join(os.path.dirname(__file__), "..", "build-vk", "vk_stderr.txt")
-    m = re.search(r"mapped \d+ KB at 0x([0-9A-Fa-f]+) \(offset", open(log, errors="replace").read())
-    # The window is mapped at guest VA 0x10000 (the image base).
-    return int(m.group(1), 16) - 0x10000
+    m = re.search(r"\(offset \+(\d+) from Xbox base\)", open(log, errors="replace").read())
+    return int(m.group(1))
 
 
 def pid():

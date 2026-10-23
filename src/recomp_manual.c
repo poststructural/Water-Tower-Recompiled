@@ -100,6 +100,10 @@ extern ptrdiff_t g_xbox_mem_offset;
 /* Guest dword at an Xbox VA. */
 #define GUEST32(va) (*(volatile uint32_t *)((uintptr_t)g_xbox_mem_offset + (uint32_t)(va)))
 
+/* A debug switch from the environment, read once: getenv in a per-draw hook
+ * costs real frame time. */
+#define ANI_ENV(name)     ({ static int v_ = -1; if (v_ < 0) v_ = getenv(name) != NULL; v_; })
+
 /* XDK 5849 D3D (non-LTCG, in the D3D section). The device pointer lives at
  * 0x0015A388; device+0x2C is the pushbuffer write sequence and device+0x30
  * points at the GPU semaphore that BACK_END_WRITE_SEMAPHORE_RELEASE (0x1D70)
@@ -201,7 +205,7 @@ void sub_000B09A0(void)
         const char *e = getenv("ANI_LEVEL");
         want = (e && *e >= '1' && *e <= '5') ? *e - '0' : 0;
     }
-    if (getenv("ANI_STATE_LOG")) {
+    if (ANI_ENV("ANI_STATE_LOG")) {
         static uint32_t last_cur = ~0u, last_req = ~0u;
         uint32_t cur = GUEST32(ANI_STATE_CURRENT), req = GUEST32(ANI_STATE_REQUESTED);
         if (cur != last_cur || req != last_req)
@@ -215,6 +219,26 @@ void sub_000B09A0(void)
         GUEST32(ANI_STATE_REQUESTED) = 3u + (uint32_t)want;
     }
     sub_000B09A0_gen();
+#if defined(ANI_NV2A_VK)
+    /* The frontend (states below 3) draws its stage as a full-screen 4:3
+     * backdrop with 3D characters standing on it, which a wider view would
+     * pull apart; it is shown at 4:3 with side bars. The levels use the
+     * picture's shape. */
+    {
+        extern float ani_aspect;
+        extern void nv2a_present_set_aspect(double aspect);
+        static float picture;
+        static int shown = -1;
+        int frontend = GUEST32(ANI_STATE_CURRENT) < 3;
+        if (picture == 0.0f)
+            picture = ani_aspect;
+        if (picture > 1.34f && frontend != shown) {
+            shown = frontend;
+            ani_aspect = frontend ? 4.0f / 3.0f : picture;
+            nv2a_present_set_aspect(ani_aspect);
+        }
+    }
+#endif
 }
 
 /* Movie player entry (0x000ECF20, cdecl: the movie's base name). The boot
@@ -280,6 +304,18 @@ void sub_0005CC80(void)
     volatile float *y = (volatile float *)((uintptr_t)g_xbox_mem_offset + ANI_PROJ_Y);
     float saved = *x;
 
+    if (ANI_ENV("ANI_WS_LOG")) {
+        static float seen[16][2];
+        static int nseen;
+        int i;
+        for (i = 0; i < nseen && !(seen[i][0] == saved && seen[i][1] == *y); i++)
+            ;
+        if (i == nseen && nseen < 16) {
+            seen[nseen][0] = saved;
+            seen[nseen++][1] = *y;
+            fprintf(stderr, "[ANI] proj scales %f %f\n", saved, *y);
+        }
+    }
     if (ani_aspect > 1.34f && saved > 0.0f) {
         float r = *y / saved;
         if (r > 1.30f && r < 1.37f)
@@ -304,7 +340,7 @@ void sub_00084110(void)
         volatile float *aspect = (volatile float *)
             ((uintptr_t)g_xbox_mem_offset + (uint32_t)(g_esp + 8));
         float a = *aspect;
-        if (getenv("ANI_WS_LOG")) {
+        if (ANI_ENV("ANI_WS_LOG")) {
             static float seen[16][7];
             static int nseen;
             float v[7];
@@ -326,7 +362,7 @@ void sub_00084110(void)
             sub_00084110_gen();
             /* cdecl: the caller pops the arguments, so restore what it passed. */
             *(volatile float *)((uintptr_t)g_xbox_mem_offset +
-                                (uint32_t)(g_esp + 4)) = a;
+                                (uint32_t)(g_esp + 8)) = a;
             return;
         }
     }
@@ -360,7 +396,7 @@ void sub_0011E4A0(void)
         g_esp += 4;   /* the ret: the caller pops the arguments (cdecl) */
         return;
     }
-    if (getenv("ANI_QUAD_LOG")) {
+    if (ANI_ENV("ANI_QUAD_LOG")) {
         static uint32_t seen[64];
         static int nseen;
         uint32_t ret = GUEST32(g_esp);
@@ -377,6 +413,72 @@ void sub_0011E4A0(void)
         }
     }
     sub_0011E4A0_gen();
+}
+
+/*
+ * 2D at 4:3 on wide pictures. The game draws its menus, text and HUD through
+ * an immediate-mode layer: 0x001378E0 begins a primitive (types >= 5 load a
+ * 640x480 orthographic projection), vertices go to the pushbuffer as
+ * SetVertexData4f(VERTEX) (method 0x1518, x y z w), and D3D End (0x0014DD80)
+ * closes it. At End the primitive's vertex x values are still in the
+ * unsubmitted pushbuffer, so they are squeezed by 4:3 / aspect there:
+ * anchored left, right or centre by which third of the screen the primitive
+ * sits in. Primitives spanning the whole width (fades, backdrops) stay
+ * stretched. ani_hud_43 = 0 (settings: hud = stretch) turns this off.
+ */
+int ani_hud_43 = 1;
+
+static uint32_t s_2d_start;   /* pushbuffer address after Begin, 0 = not 2D */
+
+extern void sub_001378E0_gen(void);
+void sub_001378E0(void)
+{
+    extern float ani_aspect;
+    int32_t prim = (int32_t)GUEST32(g_esp + 4);
+    sub_001378E0_gen();
+    s_2d_start = 0;
+    if (prim >= 5 && ani_hud_43 && ani_aspect > 1.34f)
+        s_2d_start = GUEST32(GUEST32(0x0015A388));
+}
+
+extern void sub_0014DD80_gen(void);
+void sub_0014DD80(void)
+{
+    uint32_t start = s_2d_start, end;
+    s_2d_start = 0;
+    if (start) {
+        extern float ani_aspect;
+        float lo = 1e9f, hi = -1e9f, s = (4.0f / 3.0f) / ani_aspect, x, cx;
+        uint32_t p;
+        end = GUEST32(GUEST32(0x0015A388));
+        if (end > start && end - start < 0x100000) {
+            for (p = start; p + 20 <= end; p += 4) {
+                if (GUEST32(p) != 0x00101518u)
+                    continue;
+                memcpy(&x, (const void *)((uintptr_t)g_xbox_mem_offset + p + 4), 4);
+                if (x < lo) lo = x;
+                if (x > hi) hi = x;
+                p += 16;
+            }
+            if (lo <= hi && !(lo <= 1.0f && hi >= 639.0f)) {
+                cx = 0.5f * (lo + hi);
+                for (p = start; p + 20 <= end; p += 4) {
+                    if (GUEST32(p) != 0x00101518u)
+                        continue;
+                    memcpy(&x, (const void *)((uintptr_t)g_xbox_mem_offset + p + 4), 4);
+                    if (cx < 640.0f / 3.0f)
+                        x = x * s;
+                    else if (cx > 1280.0f / 3.0f)
+                        x = 640.0f - (640.0f - x) * s;
+                    else
+                        x = 320.0f + (x - 320.0f) * s;
+                    memcpy((void *)((uintptr_t)g_xbox_mem_offset + p + 4), &x, 4);
+                    p += 16;
+                }
+            }
+        }
+    }
+    sub_0014DD80_gen();
 }
 
 

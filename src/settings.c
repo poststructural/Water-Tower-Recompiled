@@ -44,6 +44,9 @@ static const char DEFAULT_INI[] =
     "; Picture shape: 4:3 (original), 16:9, 16:10, 21:9, 32:9, or auto (the\n"
     "; monitor's). Wider shapes show more of the world at the sides.\n"
     "aspect = auto\n"
+    "; HUD and menu text on a wide picture: 4:3 (original shape, kept to the\n"
+    "; sides and centre) or stretch (spread across the width)\n"
+    "hud = 4:3\n"
     "; on (no tearing), off, or adaptive\n"
     "vsync = on\n"
     "; on shows the frame rate (F10 toggles it in game)\n"
@@ -117,6 +120,8 @@ static void apply(AniSettings *s, const char *section, const char *key,
         else if (!strcmp(key, "height") && v >= 240) s->height = v;
         else if (!strcmp(key, "fullscreen"))
             s->mode = v == 1 ? ANI_BORDERLESS : v == 2 ? ANI_BORDERLESS : ANI_WINDOWED;
+        else if (!strcmp(key, "hud"))
+            s->hud_stretch = !strcmp(val, "stretch");
         else if (!strcmp(key, "widescreen"))
             s->aspect = truthy(val) ? 16.0 / 9.0 : 4.0 / 3.0;
     } else if (!strcmp(section, "graphics")) {

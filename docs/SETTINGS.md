@@ -13,7 +13,8 @@ the file, for testing.
 |---|---|---|---|
 | `mode` | `windowed`, `fullscreen`, `exclusive` | `windowed` | `fullscreen` is borderless at the monitor's resolution. `exclusive` is accepted and currently behaves like `fullscreen`. F11 / Alt+Enter toggles in game. |
 | `resolution` | `WxH` (e.g. `1280x720`, `1920x1080`, `2560x1440`, `3840x2160`, `2560x1080`, `3440x1440`), `native` | `1920x1080` | Window size in windowed mode; shrunk to fit the monitor if larger. Fullscreen always uses the monitor's resolution. |
-| `aspect` | `4:3`, `16:9`, `16:10`, `21:9`, `32:9`, any `W:H` or decimal (1.333-4.0), `auto` | `auto` | Shape of the picture. `auto` = the window's shape (the monitor's in fullscreen). Wider than 4:3 shows more of the world at the sides (Hor+); the 2D menus and HUD stretch to fit. Narrower than 4:3 is shown as 4:3 with bars. |
+| `aspect` | `4:3`, `16:9`, `16:10`, `21:9`, `32:9`, any `W:H` or decimal (1.333-4.0), `auto` | `auto` | Shape of the picture. `auto` = the window's shape (the monitor's in fullscreen). Wider than 4:3 shows more of the world at the sides (Hor+). The frontend menus (a 4:3 painted stage) and the movies are shown at 4:3 with side bars. Narrower than 4:3 is shown as 4:3 with bars. |
+| `hud` | `4:3`, `stretch` | `4:3` | 2D on a wide picture (HUD, menu text, prompts). `4:3` keeps each item's shape, anchored to the left edge, right edge or centre; `stretch` spreads it across the width. Full-screen fades always cover the screen. |
 | `vsync` | `on`, `off`, `adaptive` (or `1`, `0`, `2`) | `on` | |
 | `show_fps` | `on`, `off` | `off` | F10 toggles in game. |
 

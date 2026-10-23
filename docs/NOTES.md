@@ -159,3 +159,19 @@ by symbol (the Release build now writes a PDB).
   its rectangle; RECOMP_COVER_SNAP=<prefix> plus creating <prefix>.req writes
   a coverage snapshot (patches/ngbrecomp-0005); scripts/guest_mem.py dumps
   and diffs guest memory of a running game.
+
+### 2D and the frontend in widescreen (2026-10-23)
+
+- Menus, text and HUD go through an immediate-mode layer: 0x001378E0 begins a
+  primitive (types >= 5 load a 640x480 orthographic projection), vertices go
+  to the pushbuffer as SetVertexData4f(VERTEX) (method 0x1518), D3D End is
+  0x0014DD80. At End the primitive's vertices are still unsubmitted, so the
+  x values are squeezed by 4:3/aspect in place, anchored by which third of
+  the screen the primitive sits in; full-width primitives are left alone.
+- The frontend stage is a full-screen 4:3 backdrop with 3D characters on it
+  (their cameras set scales through 0x00122A50); widening the view moves the
+  characters off their marks. States below 3 (boot, frontend) are shown at
+  4:3 with side bars; levels at the picture's shape.
+- getenv in a per-draw hook cost ~half the frame rate: debug switches in
+  recomp_manual.c are read once (ANI_ENV).
+- scripts/guest_mem.py read 0x10000 too low; it now uses the logged offset.

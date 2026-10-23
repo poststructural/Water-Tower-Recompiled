@@ -418,13 +418,14 @@ int main(int argc, char **argv)
     printf("Game directory: %s\n", s_game_dir);
 
     {
-        extern int ani_skip_intro;   /* recomp_manual.c */
+        extern int ani_skip_intro, ani_hud_43;   /* recomp_manual.c */
         char exe[4096], save[4096];
         exe_dir(exe, sizeof exe);
         save_dir_path(save, sizeof save);
         ani_mkdirs(save);
         ani_settings_load(&s_settings, exe, save);
         ani_skip_intro = s_settings.skip_intro;
+        ani_hud_43 = !s_settings.hud_stretch;
         printf("Settings: %s\n", s_settings.path);
     }
 
