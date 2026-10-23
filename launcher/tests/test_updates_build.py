@@ -114,7 +114,7 @@ def test_build_writes_a_log_and_checks_space(monkeypatch):
     Usage = collections.namedtuple("Usage", "total used free")
     monkeypatch.setattr(build.shutil, "disk_usage", lambda p: Usage(0, 0, 2e9))
     v = updates.GameVersion("main-abc", "x", "abc", "main")
-    with pytest.raises(build.BuildError, match="needs about 15 GB"):
+    with pytest.raises(build.BuildError, match="needs about 4 GB"):
         build.build(v, "g", config.Settings(), log=lambda s: None)
 
     monkeypatch.setattr(build.shutil, "disk_usage", lambda p: Usage(0, 0, 100e9))

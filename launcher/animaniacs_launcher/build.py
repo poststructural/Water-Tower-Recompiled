@@ -287,8 +287,8 @@ def dll_dirs() -> list[str]:
 
 # Free space a build needs: the first one also downloads the toolchain and
 # libraries and generates ~40 MB of C; later ones rebuild in place.
-FIRST_BUILD_GB = 15
-UPDATE_GB = 4
+FIRST_BUILD_GB = 4
+UPDATE_GB = 2
 
 
 def check_space(path: str | None = None) -> None:

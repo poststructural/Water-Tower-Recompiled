@@ -68,9 +68,10 @@ The launcher offers to install both with `winget`. It puts the build's Python
 tools (capstone, cmake, ninja, pkgconf) in its own venv. Ghidra is optional
 (function names in crash logs; set its folder in Settings).
 
-A first build needs about 15 GB free on the launcher's drive (toolchain,
-checkout and build tree) and an update about 4 GB; the launcher checks before
-it starts. Every build writes its whole output to `logs/build-*.txt`, and a
+A first build needs about 4 GB free on the launcher's drive (it uses about
+1.5 GB for the toolchain, checkout and build tree) and an update about 2 GB;
+the launcher checks before it starts. A build takes a few minutes, most of it
+the first toolchain download. Every build writes its whole output to `logs/build-*.txt`, and a
 failed build names that file.
 
 Windows SmartScreen may warn about the installer because it is not code
