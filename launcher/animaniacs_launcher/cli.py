@@ -55,7 +55,8 @@ def main(argv: list[str] | None = None) -> int:
             print("Installed build:", st.current_build or st.custom_exe or "none")
             return 0 if chk and chk.ok and tc.ok else 1
         elif args.cmd == "update":
-            v = updates.latest_game("main" if args.main else st.channel, st.include_prereleases)
+            v = updates.latest_game("main" if args.main else st.channel, st.include_prereleases,
+                                    st.update_source)
             if v.name == st.current_build and not args.force:
                 print(f"Up to date: {v.name}")
                 return 0

@@ -8,7 +8,7 @@ import subprocess
 import sys
 import time
 
-from . import build, config, profiles
+from . import build, config, mods, profiles
 
 
 class PlayError(Exception):
@@ -35,10 +35,17 @@ def current_exe(settings: config.Settings) -> tuple[str, list[str]]:
     return exe, dirs or build.dll_dirs()
 
 
-def launch(settings: config.Settings) -> tuple[subprocess.Popen, str]:
-    """Start the game; returns the process and the log file it writes to."""
+def launch(settings: config.Settings, game_dir: str | None = None) -> tuple[subprocess.Popen, str]:
+    """Start the game; returns the process and the log file it writes to.
+    game_dir: the folder to start it on, when not the game files themselves
+    (mods.prepare)."""
     if not settings.game_dir:
         raise PlayError("no game files set up yet")
+    if game_dir is None:
+        try:
+            game_dir = mods.prepare(settings.game_dir)
+        except (mods.ModError, OSError) as e:
+            raise PlayError(f"could not apply the mods: {e}")
     exe, dirs = current_exe(settings)
     env = dict(os.environ)
     env["PATH"] = os.pathsep.join([*dirs, env.get("PATH", "")])
@@ -54,7 +61,7 @@ def launch(settings: config.Settings) -> tuple[subprocess.Popen, str]:
     else:
         out, err, flags = log, subprocess.STDOUT, 0
     try:
-        p = subprocess.Popen([exe, settings.game_dir], cwd=os.path.dirname(exe), env=env,
+        p = subprocess.Popen([exe, game_dir], cwd=os.path.dirname(exe), env=env,
                              stdout=out, stderr=err, stdin=subprocess.DEVNULL,
                              creationflags=flags)
     except OSError as e:
@@ -89,6 +96,9 @@ def system_info(settings: config.Settings) -> str:
     if settings.game_dir:
         lines.append(f"Game files: {gamefiles.check_dir(settings.game_dir).summary()}")
     lines.append(f"Profile: {settings.profile or 'default'}")
+    on = [f"{m.id} {m.version}".strip() for m in mods.load() if m.enabled]
+    lines.append("Mods: " + (", ".join(on) if on else "none"))
+    lines.append(f"Update source: {settings.update_source or 'default (GitHub)'}")
     try:
         exe, _ = current_exe(settings)
         ini = gamesettings.location(exe)

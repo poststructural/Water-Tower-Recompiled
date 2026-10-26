@@ -22,13 +22,14 @@ import webbrowser
 from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
-from . import (REPO, __version__, build, config, gamefiles, gamepad, gamesettings, play,
+from . import (REPO, __version__, build, config, gamefiles, gamepad, gamesettings, mods, play,
                profiles, steam, updates)
 from .gamesettings import (ASPECTS, HUDS, MAX_SCALES, MODES, MSAA, RENDER_SCALES, RESOLUTIONS,
                            TEXTURE_FILTERS, VSYNC)
 
 CHANNELS = {"release": "Releases", "main": "Latest main (newest commit)"}
-TABS = ["HOME", "DISPLAY", "GRAPHICS", "GAMEPLAY", "SAVES", "UPDATES", "ABOUT"]
+TABS = ["HOME", "DISPLAY", "GRAPHICS", "GAMEPLAY", "SAVES", "MODS", "UPDATES", "ABOUT"]
+UPDATES_TAB = TABS.index("UPDATES")
 
 # Warner Bros. water tower palette on a dark backdrop.
 BG = "#0d1117"
@@ -183,9 +184,9 @@ class App:
         bar.pack(fill="x", padx=22)
         self.tab_buttons = []
         for i, name in enumerate(TABS):
-            b = ttk.Button(bar, text=name, style="Tab.TButton", takefocus=False,
+            b = ttk.Button(bar, text=name, style="Tab.TButton", takefocus=False, width=1,
                            command=lambda i=i: self.show_tab(i))
-            b.pack(side="left")
+            b.pack(side="left", expand=True, fill="x")
             self.tab_buttons.append(b)
 
         # The status line is packed first so a tall page never pushes it off.
@@ -199,7 +200,7 @@ class App:
         self.body = ttk.Frame(r, style="Panel.TFrame")
         self.body.pack(fill="both", expand=True, padx=28)
         self.pages = [self._home(), self._display(), self._graphics(), self._gameplay(),
-                      self._saves(), self._updates(), self._about()]
+                      self._saves(), self._mods(), self._updates(), self._about()]
 
     def _page(self) -> ttk.Frame:
         f = ttk.Frame(self.body, style="Panel.TFrame", padding=(28, 22))
@@ -244,7 +245,7 @@ class App:
         self.m_verify = ttk.Button(menu, text="VERIFY GAME FILES", style="Menu.TButton", width=22,
                                    command=self.verify)
         self.m_updates = ttk.Button(menu, text="CHECK FOR UPDATES", style="Menu.TButton", width=22,
-                                    command=lambda: (self.show_tab(5), self.check_updates()))
+                                    command=lambda: (self.show_tab(UPDATES_TAB), self.check_updates()))
         self.m_settings = ttk.Button(menu, text="SETTINGS", style="Menu.TButton", width=22,
                                      command=lambda: self.show_tab(1))
         self.m_quit = ttk.Button(menu, text="QUIT", style="Menu.TButton", width=22, command=self.quit)
@@ -398,6 +399,39 @@ class App:
         self.saves_label.grid(sticky="w", columnspan=3, pady=(14, 0))
         return f
 
+    def _mods(self) -> ttk.Frame:
+        f = self._page()
+        f.columnconfigure(0, weight=1)
+        self._heading(f, "Mods", "Mods replace or add game files, such as textures, sounds and "
+                                 "levels. Your game files are never changed: Play lays the mods "
+                                 "that are on over a copy. Lower in the list wins when two mods "
+                                 "replace the same file.")
+        box = ttk.Frame(f, style="Panel.TFrame")
+        box.grid(sticky="we", columnspan=3)
+        self.mod_list = tk.Listbox(box, height=8, bg=FIELD, fg=TEXT, selectbackground=GOLD,
+                                   selectforeground=BG, relief="flat", highlightthickness=0,
+                                   font=(UI, 10), activestyle="none", exportselection=False)
+        self.mod_list.pack(side="left", fill="both", expand=True)
+        self.mod_list.bind("<<ListboxSelect>>", lambda _e: self._mod_selected())
+        self.mod_list.bind("<space>", lambda _e: self.toggle_mod())
+        side = ttk.Frame(box, style="Panel.TFrame")
+        side.pack(side="left", fill="y", padx=(8, 0))
+        for text, fn in (("Turn on / off", self.toggle_mod), ("Move up", lambda: self.move_mod(-1)),
+                         ("Move down", lambda: self.move_mod(1)), ("Remove", self.remove_mod)):
+            ttk.Button(side, text=text, command=fn).pack(fill="x", pady=(0, 6))
+        acts = ttk.Frame(f, style="Panel.TFrame")
+        acts.grid(sticky="w", columnspan=3, pady=(12, 0))
+        ttk.Button(acts, text="Add mod (.zip)…", style="Gold.TButton",
+                   command=lambda: self.add_mod(False)).pack(side="left")
+        ttk.Button(acts, text="Add mod folder…", command=lambda: self.add_mod(True)).pack(side="left", padx=8)
+        ttk.Button(acts, text="Open mods folder",
+                   command=lambda: (os.makedirs(mods.root(), exist_ok=True),
+                                    _open_folder(mods.root()))).pack(side="left")
+        self.mod_info = ttk.Label(f, style="PanelMuted.TLabel", wraplength=760, justify="left")
+        self.mod_info.grid(sticky="w", columnspan=3, pady=(14, 0))
+        self.mod_items: list[mods.Mod] = []
+        return f
+
     def _updates(self) -> ttk.Frame:
         f = self._page()
         f.columnconfigure(1, weight=1)
@@ -414,6 +448,14 @@ class App:
         ttk.Checkbutton(opts, text="Check when the launcher opens", variable=self.auto,
                         command=self._update_prefs).pack(side="left", padx=16)
         self._row(f, "Options", opts)
+        srow = ttk.Frame(f, style="Panel.TFrame")
+        self.source = tk.StringVar(value=self.st.update_source)
+        e = ttk.Entry(srow, textvariable=self.source, width=46)
+        e.pack(side="left")
+        e.bind("<Return>", lambda _e: self._source_changed())
+        ttk.Button(srow, text="Use", command=self._source_changed).pack(side="left", padx=6)
+        self._row(f, "Update source", srow, "Blank for the project's GitHub; or an update "
+                                            "file (.json), git address or folder")
         self.u_status = ttk.Label(f, style="Panel.TLabel", wraplength=760, justify="left")
         self.u_status.grid(sticky="w", columnspan=3, pady=(8, 4))
         acts = ttk.Frame(f, style="Panel.TFrame")
@@ -422,6 +464,8 @@ class App:
         self.b_check.pack(side="left")
         self.b_update = ttk.Button(acts, text="Update", style="Gold.TButton", command=self.update)
         self.b_update.pack(side="left", padx=8)
+        self.b_file = ttk.Button(acts, text="Install update from file…", command=self.update_from_file)
+        self.b_file.pack(side="left")
         self.b_tools = ttk.Button(acts, text="Install missing tools", command=self.install_tools)
         self.tools_label = ttk.Label(f, style="PanelMuted.TLabel", wraplength=760, justify="left")
         self.tools_label.grid(sticky="w", columnspan=3, pady=(6, 0))
@@ -429,7 +473,7 @@ class App:
         ttk.Label(f, text="INSTALLED BUILDS", style="PanelMuted.TLabel").grid(sticky="w", columnspan=3, pady=(16, 2))
         bl = ttk.Frame(f, style="Panel.TFrame")
         bl.grid(sticky="we", columnspan=3)
-        self.builds = tk.Listbox(bl, height=3, bg=FIELD, fg=TEXT, selectbackground=GOLD,
+        self.builds = tk.Listbox(bl, height=2, bg=FIELD, fg=TEXT, selectbackground=GOLD,
                                  selectforeground=BG, relief="flat", highlightthickness=0,
                                  font=(UI, 10), activestyle="none")
         self.builds.pack(side="left", fill="x", expand=True)
@@ -503,9 +547,11 @@ class App:
         self.pages[self.tab].pack(fill="both", expand=True)
         for j, b in enumerate(self.tab_buttons):
             b.configure(style="TabOn.TButton" if j == self.tab else "Tab.TButton")
-        if self.tab == 4:
+        if TABS[self.tab] == "SAVES":
             self._fill_profiles()
-        if self.tab == 5:
+        if TABS[self.tab] == "MODS":
+            self._fill_mods()
+        if TABS[self.tab] == "UPDATES":
             self._fill_builds()
         self.root.after_idle(self._focus_first)
 
@@ -752,11 +798,100 @@ class App:
         self.load_game_settings()
         self.refresh()
 
+    def _source_changed(self) -> None:
+        text = self.source.get().strip()
+        if text == self.st.update_source:
+            return
+        self.st.update_source = text
+        self.st.save()
+        self.latest = None
+        self.launcher_release = None
+        self.check_updates()
+
     def _channel_changed(self) -> None:
         self.st.channel = self.channel.get() or "release"
         self.st.save()
         self.latest = None
         self.check_updates()
+
+    # ── Mods ────────────────────────────────────────────────────────────
+
+    def _fill_mods(self, select: int | None = None) -> None:
+        self.mod_items = mods.load()
+        self.mod_list.delete(0, "end")
+        for m in self.mod_items:
+            mark = "✓" if m.enabled else "  ·"
+            by = f"   by {m.author}" if m.author else ""
+            self.mod_list.insert("end", f"  {mark}  {m.name}  {m.version}{by}"
+                                        + ("" if m.enabled else "   (off)"))
+        if self.mod_items:
+            i = min(select if select is not None else 0, len(self.mod_items) - 1)
+            self.mod_list.selection_set(i)
+            self.mod_list.see(i)
+        self._mod_selected()
+
+    def _mod_index(self) -> int | None:
+        sel = self.mod_list.curselection()
+        return sel[0] if sel else None
+
+    def _mod_selected(self) -> None:
+        if not self.mod_items:
+            self.mod_info.config(text="No mods yet. A mod is a .zip or folder with a mod.json "
+                                      "and a files/ folder laid out like the game folder.")
+            return
+        lines = []
+        i = self._mod_index()
+        if i is not None:
+            m = self.mod_items[i]
+            n = len(m.files())
+            lines.append(f"{m.name}: {m.description or 'no description'} "
+                         f"({n} file{'s' if n != 1 else ''})")
+        clash = mods.conflicts(self.mod_items)
+        if clash:
+            lines.append(f"{len(clash)} file{' is' if len(clash) == 1 else 's are'} replaced by "
+                         "more than one mod that is on; the lowest in the list wins.")
+        on = sum(m.enabled for m in self.mod_items)
+        lines.append(f"{on} of {len(self.mod_items)} mods on.")
+        self.mod_info.config(text="\n".join(lines))
+
+    def toggle_mod(self) -> None:
+        i = self._mod_index()
+        if i is None:
+            return
+        self.mod_items[i].enabled = not self.mod_items[i].enabled
+        mods.save(self.mod_items)
+        self._fill_mods(i)
+
+    def move_mod(self, d: int) -> None:
+        i = self._mod_index()
+        if i is None or not 0 <= i + d < len(self.mod_items):
+            return
+        items = self.mod_items
+        items[i], items[i + d] = items[i + d], items[i]
+        mods.save(items)
+        self._fill_mods(i + d)
+
+    def remove_mod(self) -> None:
+        i = self._mod_index()
+        if i is None:
+            return
+        m = self.mod_items[i]
+        if messagebox.askyesno("Remove mod", f"Remove {m.name}? Its files are deleted from "
+                                             "the mods folder."):
+            mods.remove(m.id)
+            self._fill_mods(i)
+
+    def add_mod(self, folder: bool) -> None:
+        path = (filedialog.askdirectory(title="The mod's folder") if folder else
+                filedialog.askopenfilename(title="A mod", filetypes=[("Mod", "*.zip"),
+                                                                     ("All files", "*.*")]))
+        if not path:
+            return
+
+        def done(m):
+            self._log(f"Installed mod {m.name} {m.version}")
+            self._fill_mods(next((i for i, x in enumerate(mods.load()) if x.id == m.id), 0))
+        self._run("Installing mod", lambda: mods.install(path), done, pulse=True)
 
     # ── Profiles ────────────────────────────────────────────────────────
 
@@ -845,7 +980,7 @@ class App:
 
         running = bool(self.game and self.game.poll() is None)
         idle = "disabled" if self.busy else "normal"
-        for b in (self.b_image, self.b_folder, self.b_check):
+        for b in (self.b_image, self.b_folder, self.b_check, self.b_file):
             b.config(state=idle)
         can_build = not self.busy and self.game_ok and not why and bool(tc.git and tc.bash)
         self.b_update.config(state="normal" if can_build else "disabled",
@@ -988,7 +1123,7 @@ class App:
         if not self.game_ok:
             self.pick_image()
         elif not (self.st.current_build or self.st.custom_exe):
-            self.show_tab(5)
+            self.show_tab(UPDATES_TAB)
             self.update()
         else:
             self.play()
@@ -1028,9 +1163,10 @@ class App:
 
     def check_updates(self, quiet: bool = False) -> None:
         def work():
-            v = updates.latest_game(self.st.channel, self.st.include_prereleases)
+            v = updates.latest_game(self.st.channel, self.st.include_prereleases,
+                                    self.st.update_source)
             try:
-                lr = updates.latest_launcher()
+                lr = updates.latest_launcher(self.st.update_source)
             except updates.UpdateError:
                 lr = None
             return v, lr
@@ -1044,17 +1180,38 @@ class App:
             return
         self._run("Checking for updates", work, done, pulse=True, quiet=quiet)
 
-    def update(self) -> None:
-        if not self.latest:
+    def update_from_file(self) -> None:
+        path = filedialog.askopenfilename(
+            title="An update file",
+            filetypes=[("Game source bundle or launcher installer", "*.bundle *.exe"),
+                       ("All files", "*.*")])
+        if not path:
+            return
+        if path.lower().endswith(".exe"):
+            if messagebox.askokcancel("Update the launcher",
+                                      f"Run {os.path.basename(path)} to update the launcher? "
+                                      "The launcher closes while it installs."):
+                subprocess.Popen([path, "/SILENT"])
+                self.root.destroy()
+            return
+
+        def done(v):
+            self.update(v)
+        self._run("Reading the update file",
+                  lambda: updates.from_bundle(path, self.st.channel, True), done, pulse=True)
+
+    def update(self, version: updates.GameVersion | None = None) -> None:
+        if version is None and not self.latest:
             def work():
-                return updates.latest_game(self.st.channel, self.st.include_prereleases)
+                return updates.latest_game(self.st.channel, self.st.include_prereleases,
+                                           self.st.update_source)
 
             def done(v):
                 self.latest = v
                 self.update()
             self._run("Checking for updates", work, done, pulse=True)
             return
-        v = self.latest
+        v = version or self.latest
         if v.name == self.st.current_build and not messagebox.askyesno(
                 "Rebuild", f"{v.name} is already installed. Build it again?"):
             return
@@ -1108,7 +1265,7 @@ class App:
 
         def work():
             dest = config.sub(f"AnimaniacsLauncherSetup-{lr.version}.exe")
-            return updates.download(lr.installer_url, dest, self._progress)
+            return updates.download(lr.installer_url, dest, self._progress, lr.sha256)
 
         def done(path):
             subprocess.Popen([path, "/SILENT"])
@@ -1118,8 +1275,17 @@ class App:
     def play(self) -> None:
         if self.changes and not self.save_game_settings():
             return
+        if self.busy:
+            return
+        if any(m.enabled for m in mods.load()):
+            self._run("Applying mods", lambda: mods.prepare(self.st.game_dir, log=self._log),
+                      self._start_game, pulse=True)
+        else:
+            self._start_game(self.st.game_dir)
+
+    def _start_game(self, game_dir: str) -> None:
         try:
-            self.game, self.game_log = play.launch(self.st)
+            self.game, self.game_log = play.launch(self.st, game_dir)
         except (play.PlayError, ValueError) as e:
             messagebox.showerror("Play", str(e))
             return

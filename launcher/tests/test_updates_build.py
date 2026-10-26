@@ -135,3 +135,88 @@ def test_build_writes_a_log_and_checks_space(monkeypatch):
     with pytest.raises(build.Cancelled) as e:
         build.build(v, "g", config.Settings(), log=lambda s: None)
     assert str(e.value) == "cancelled"
+
+
+def _git(*args, cwd=None):
+    import subprocess
+    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True,
+                   env={**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+                        "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"})
+
+
+def _repo(tmp_path):
+    repo = tmp_path / "repo"
+    _git("init", "-q", "-b", "main", str(repo))
+    (repo / "README.md").write_text("one")
+    _git("add", "-A", cwd=repo)
+    _git("commit", "-qm", "one", cwd=repo)
+    _git("tag", "v1.0.0", cwd=repo)
+    (repo / "README.md").write_text("two")
+    _git("commit", "-qam", "two", cwd=repo)
+    _git("tag", "-a", "v1.1.0-rc1", "-m", "rc", cwd=repo)
+    (repo / "README.md").write_text("three")
+    _git("commit", "-qam", "three", cwd=repo)
+    return repo
+
+
+def test_parse_source():
+    assert updates.parse_source("").repo == "Unowa001/AnimaniacsRecompiled"
+    assert updates.parse_source("https://github.com/a/b.git").kind == "github"
+    assert updates.parse_source("https://example.org/ani/update.json").kind == "manifest"
+    assert updates.parse_source("https://codeberg.org/a/b.git").kind == "git"
+    assert updates.parse_source(r"C:\src\AnimaniacsRecompiled").kind == "git"
+
+
+def test_git_source_versions_and_checkout(tmp_path):
+    repo = _repo(tmp_path)
+    v = updates.latest_game("release", source=str(repo))
+    assert (v.name, v.ref, v.source) == ("v1.0.0", "refs/tags/v1.0.0", str(repo))
+    assert updates.latest_game("release", True, str(repo)).name == "v1.1.0-rc1"
+    m = updates.latest_game("main", source=str(repo))
+    assert m.name.startswith("main-") and m.channel == "main"
+
+    r = build.Runner(lambda s: None)
+    git = build.find_git()
+    src = build.checkout(r, git, v)
+    assert open(os.path.join(src, "README.md")).read() == "one"
+    build.checkout(r, git, m)
+    assert open(os.path.join(src, "README.md")).read() == "three"
+
+
+def test_update_from_a_bundle(tmp_path):
+    repo = _repo(tmp_path)
+    bundle = tmp_path / "update.bundle"
+    _git("bundle", "create", str(bundle), "--all", cwd=repo)
+    v = updates.from_bundle(str(bundle))
+    assert v.name == "v1.1.0-rc1"
+    src = build.checkout(build.Runner(lambda s: None), build.find_git(), v)
+    assert open(os.path.join(src, "README.md")).read() == "two"
+    m = updates.from_bundle(str(bundle), "main")
+    build.checkout(build.Runner(lambda s: None), build.find_git(), m)
+    assert open(os.path.join(src, "README.md")).read() == "three"
+
+
+def test_manifest_source(tmp_path, monkeypatch):
+    repo = _repo(tmp_path)
+    man = tmp_path / "update.json"
+    man.write_text(json.dumps({"source": str(repo), "launcher": {
+        "version": "9.1.0", "url": "https://example.org/setup.exe", "sha256": "AB"}}))
+    assert updates.latest_game("release", source=str(man)).name == "v1.0.0"
+    lr = updates.latest_launcher(str(man))
+    assert lr and (lr.version, lr.installer_url, lr.sha256) == ("9.1.0", "https://example.org/setup.exe", "ab")
+    man.write_text(json.dumps({"launcher": {"version": "0.0.1"}}))
+    assert updates.latest_launcher(str(man)) is None
+    assert updates.latest_launcher(str(repo)) is None
+
+
+def test_download_checks_sha256(tmp_path):
+    import hashlib
+    f = tmp_path / "setup.exe"
+    f.write_bytes(b"installer")
+    url = f.as_uri()
+    good = hashlib.sha256(b"installer").hexdigest()
+    assert updates.download(url, str(tmp_path / "a.exe"), sha256=good)
+    import pytest
+    with pytest.raises(updates.UpdateError, match="sha256"):
+        updates.download(url, str(tmp_path / "b.exe"), sha256="0" * 64)
+    assert not os.path.exists(tmp_path / "b.exe")

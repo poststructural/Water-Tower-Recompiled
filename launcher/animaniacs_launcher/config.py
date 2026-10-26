@@ -8,6 +8,8 @@ Everything lives under one data folder:
 
         settings.json
         game/        the extracted game, when it came from a disc image or zip
+        mods/        installed mods, and mods.json (their order); see mods.py
+        game-modded/ the game with the enabled mods' files laid over it
         source/      git checkout the game is built from
         windeps/     llvm-mingw and the CLANG64 libraries (shared by builds)
         pyenv/       Python venv with the build's Python tools
@@ -51,7 +53,11 @@ def save_dir() -> str:
 @dataclass
 class Settings:
     game_dir: str = ""
-    # "release": the newest GitHub release; "main": the newest commit on main.
+    # Where updates come from (updates.py): a GitHub repository, an update
+    # file (.json), or any git address, folder or bundle. "" = the project's
+    # GitHub repository.
+    update_source: str = ""
+    # "release": the newest version; "main": the newest commit on main.
     channel: str = "release"
     include_prereleases: bool = False
     current_build: str = ""

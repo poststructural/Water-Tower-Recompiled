@@ -236,24 +236,35 @@ def ensure_pyenv(r: Runner, tc: Toolchain) -> None:
         f.write(" ".join(PY_TOOLS))
 
 
-def checkout(r: Runner, git: str, ref: str) -> str:
+def checkout(r: Runner, git: str, version) -> str:
+    """Fetch version.ref from version.source (a git address, a folder or a
+    bundle) into the launcher's checkout and check it out."""
     src = config.sub("source")
+    source = version.source or f"https://github.com/{REPO}.git"
     if not os.path.isdir(os.path.join(src, ".git")):
         r.log("== Downloading the source")
         shutil.rmtree(src, ignore_errors=True)
-        r.run([git, "clone", f"https://github.com/{REPO}.git", src])
-    r.log(f"== Checking out {ref}")
-    r.run([git, "-C", src, "fetch", "--force", "--tags", "origin",
-           "+refs/heads/main:refs/remotes/origin/main"])
-    if ref.startswith("refs/tags/"):
-        r.run([git, "-C", src, "fetch", "--force", "origin", f"+{ref}:{ref}"])
+        os.makedirs(src)
+        r.run([git, "-C", src, "init", "-q"])
+    r.log(f"== Fetching {version.name} from {source}")
+    tag = version.ref.startswith("refs/")
+    # A tag by name; a commit on main by fetching the branches (a bundle
+    # serves only its refs, so no fetching a bare commit id).
+    spec = f"+{version.ref}:{version.ref}" if tag else "+refs/heads/*:refs/remotes/source/*"
+    r.run([git, "-C", src, "fetch", "--force", "--no-tags", source, spec])
     # setup_vk.sh and regen.sh patch the submodules in place: put them back
     # the way git has them so the new version's patches apply cleanly.
     r.run([git, "-C", src, "submodule", "foreach", "--recursive",
            "git reset -q --hard && git clean -qfd"])
-    r.run([git, "-C", src, "checkout", "--force", "--detach", ref])
+    r.run([git, "-C", src, "checkout", "--force", "--detach", version.ref if tag else version.sha])
     r.run([git, "-C", src, "submodule", "sync", "--recursive"])
-    r.run([git, "-C", src, "submodule", "update", "--init", "--force", "tools/ngbrecomp"])
+    try:
+        with open(os.path.join(src, ".gitmodules"), encoding="utf-8") as f:
+            has_tk = "tools/ngbrecomp" in f.read()
+    except OSError:
+        has_tk = False
+    if has_tk:
+        r.run([git, "-C", src, "submodule", "update", "--init", "--force", "tools/ngbrecomp"])
     return src
 
 
@@ -344,7 +355,7 @@ def _build(version, game_dir: str, settings: config.Settings, log: Log,
     step("Installing build tools")
     ensure_pyenv(r, tc)
     step("Downloading the source")
-    src = checkout(r, tc.git, version.ref)
+    src = checkout(r, tc.git, version)
     env = build_env(game_dir, settings)
     bash = tc.bash
 
@@ -404,6 +415,7 @@ def install(version, bdir: str, carry_from: str = "") -> str:
     carry_settings(carry_from, tmp)
     with open(os.path.join(tmp, "build.json"), "w", encoding="utf-8") as f:
         json.dump({"name": version.name, "sha": version.sha, "channel": version.channel,
+                   "source": version.source,
                    "built": time.strftime("%Y-%m-%d %H:%M"), "dll_dirs": dll_dirs()}, f, indent=2)
     shutil.rmtree(dest, ignore_errors=True)
     os.replace(tmp, dest)
