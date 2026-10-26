@@ -21,6 +21,11 @@ def _progress(done: int, total: int, name: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Build logs carry UTF-8 (compiler messages); a cp1252 console or pipe
+    # must not end the build over a character it cannot show.
+    for f in (sys.stdout, sys.stderr):
+        if f is not None and hasattr(f, "reconfigure"):
+            f.reconfigure(errors="replace")
     ap = argparse.ArgumentParser(prog="AnimaniacsLauncher",
                                  description="Animaniacs: The Great Edgar Hunt recomp launcher")
     ap.add_argument("--version", action="version", version=__version__)

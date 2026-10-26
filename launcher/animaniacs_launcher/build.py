@@ -275,8 +275,6 @@ def build_env(game_dir: str, settings: config.Settings) -> dict[str, str]:
         "TK": TK,
         "XBE": _fwd(os.path.join(game_dir, "default.xbe")),
         "PY": _fwd(venv_python()),
-        # Git Bash: do not rewrite /-prefixed arguments into Windows paths.
-        "MSYS_NO_PATHCONV": "1",
     }
     if settings.ghidra_home:
         env["GHIDRA_HOME"] = _fwd(settings.ghidra_home)
@@ -374,6 +372,7 @@ def _build(version, game_dir: str, settings: config.Settings, log: Log,
            f"-DCMAKE_MAKE_PROGRAM={_fwd(venv_tool('ninja'))}",
            f"-DCMAKE_TOOLCHAIN_FILE={_fwd(os.path.join(src, 'cmake', 'toolchains', 'windows-llvm-mingw.cmake'))}",
            f"-DANI_WIN_DEPS={env['ANI_WIN_DEPS']}",
+           "-DCMAKE_TRY_COMPILE_PLATFORM_VARIABLES=ANI_WIN_DEPS",
            f"-DANI_GUI={'OFF' if settings.show_console else 'ON'}"]
     pc = pkgconf_exe()
     if pc:
