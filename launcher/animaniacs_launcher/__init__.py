@@ -2,4 +2,6 @@
 
 __version__ = "0.2.0"
 
-REPO = "Unowa001/AnimaniacsRecompiled"
+# The project's home: where updates come from unless the player picks another
+# update source.
+HOME_URL = "https://gitlab.com/unowa001/animaniacs-remastered"

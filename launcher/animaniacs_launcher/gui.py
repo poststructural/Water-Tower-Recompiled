@@ -22,7 +22,7 @@ import webbrowser
 from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
-from . import (REPO, __version__, build, config, gamefiles, gamepad, gamesettings, mods, play,
+from . import (HOME_URL, __version__, build, config, gamefiles, gamepad, gamesettings, mods, play,
                profiles, steam, updates)
 from .gamesettings import (ASPECTS, HUDS, MAX_SCALES, MODES, MSAA, RENDER_SCALES, RESOLUTIONS,
                            TEXTURE_FILTERS, VSYNC)
@@ -454,7 +454,7 @@ class App:
         e.pack(side="left")
         e.bind("<Return>", lambda _e: self._source_changed())
         ttk.Button(srow, text="Use", command=self._source_changed).pack(side="left", padx=6)
-        self._row(f, "Update source", srow, "Blank for the project's GitHub; or an update "
+        self._row(f, "Update source", srow, "Blank for the project's GitLab; or an update "
                                             "file (.json), git address or folder")
         self.u_status = ttk.Label(f, style="Panel.TLabel", wraplength=760, justify="left")
         self.u_status.grid(sticky="w", columnspan=3, pady=(8, 4))
@@ -494,7 +494,7 @@ class App:
         acts = ttk.Frame(f, style="Panel.TFrame")
         acts.grid(sticky="w", columnspan=3, pady=(0, 12))
         ttk.Button(acts, text="Project page",
-                   command=lambda: webbrowser.open(f"https://github.com/{REPO}")).pack(side="left")
+                   command=lambda: webbrowser.open(HOME_URL)).pack(side="left")
         ttk.Button(acts, text="Open logs folder",
                    command=lambda: _open_folder(config.sub("logs"))).pack(side="left", padx=8)
         ttk.Button(acts, text="Copy system info", command=self.copy_info).pack(side="left")

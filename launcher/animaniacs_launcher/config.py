@@ -53,9 +53,9 @@ def save_dir() -> str:
 @dataclass
 class Settings:
     game_dir: str = ""
-    # Where updates come from (updates.py): a GitHub repository, an update
-    # file (.json), or any git address, folder or bundle. "" = the project's
-    # GitHub repository.
+    # Where updates come from (updates.py): a GitLab or GitHub project, an
+    # update file (.json), or any git address, folder or bundle. "" = the
+    # project's home (HOME_URL, on GitLab).
     update_source: str = ""
     # "release": the newest version; "main": the newest commit on main.
     channel: str = "release"

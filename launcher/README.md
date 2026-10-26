@@ -63,9 +63,13 @@ is the game's own `%LOCALAPPDATA%\AnimaniacsRecompiled`.
 
 One setting on the Updates tab says where updates come from:
 
-- **Blank**: the project's GitHub repository. Game versions are its releases
-  (or `main`) and launcher updates its `launcher-v*` releases.
-- **Another GitHub repository**: `https://github.com/<owner>/<repo>`, the same way.
+- **Blank**: the project's home on GitLab
+  (`https://gitlab.com/unowa001/animaniacs-remastered`). Game versions are
+  its `v*` tags (or `main`) and launcher updates its `launcher-v*` releases.
+- **Another GitLab project**: `https://gitlab.com/<owner>/<project>` (or a
+  self-hosted GitLab), the same way.
+- **A GitHub repository**: `https://github.com/<owner>/<repo>`. Game versions
+  are its releases (or `main`) and launcher updates its `launcher-v*` releases.
 - **An update file**: an `https://` address or a path ending in `.json`, so
   updates can be hosted anywhere:
 
@@ -147,13 +151,17 @@ Uninstalling removes that folder and keeps your saves.
 
 ## Releasing
 
-- Game: push a version tag (`v1.0.0`; `v1.1.0-rc1` for a pre-release).
-  `.github/workflows/release.yml` publishes the release with generated
-  notes, and launchers on the Releases channel build it on their next
-  update check.
+On GitLab (`.gitlab-ci.yml`):
+
+- Game: push a version tag (`v1.0.0`; `v1.1.0-rc1` for a pre-release). The
+  pipeline publishes a release, and launchers on the Releases channel build
+  that tag on their next update check.
 - Launcher: bump `__version__` in `animaniacs_launcher/__init__.py` and push
-  a `launcher-v<version>` tag. CI (`.github/workflows/launcher.yml`) builds
-  the installer and attaches it to that release.
+  a `launcher-v<version>` tag. The pipeline builds the installer on a
+  Windows runner, uploads it to the project's package registry and publishes
+  a release linking it; installed launchers offer it as an update.
+
+The `.github/workflows` files do the same on GitHub.
 
 ## Tests
 

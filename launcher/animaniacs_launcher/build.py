@@ -26,7 +26,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable
 
-from . import REPO, config
+from . import HOME_URL, config
 
 PY_TOOLS = ("capstone", "cmake", "ninja", "pkgconf")
 TK = "tools/ngbrecomp/xboxrecomp"
@@ -240,7 +240,7 @@ def checkout(r: Runner, git: str, version) -> str:
     """Fetch version.ref from version.source (a git address, a folder or a
     bundle) into the launcher's checkout and check it out."""
     src = config.sub("source")
-    source = version.source or f"https://github.com/{REPO}.git"
+    source = version.source or HOME_URL + ".git"
     if not os.path.isdir(os.path.join(src, ".git")):
         r.log("== Downloading the source")
         shutil.rmtree(src, ignore_errors=True)

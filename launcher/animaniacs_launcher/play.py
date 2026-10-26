@@ -98,7 +98,7 @@ def system_info(settings: config.Settings) -> str:
     lines.append(f"Profile: {settings.profile or 'default'}")
     on = [f"{m.id} {m.version}".strip() for m in mods.load() if m.enabled]
     lines.append("Mods: " + (", ".join(on) if on else "none"))
-    lines.append(f"Update source: {settings.update_source or 'default (GitHub)'}")
+    lines.append(f"Update source: {settings.update_source or 'default (GitLab)'}")
     try:
         exe, _ = current_exe(settings)
         ini = gamesettings.location(exe)

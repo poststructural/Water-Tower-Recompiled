@@ -2,9 +2,12 @@
 
 Where updates come from is one setting, the update source, which can be:
 
+  a GitLab project      https://gitlab.com/<owner>/<project> (the default):
+                        game versions from its version tags and main branch,
+                        launcher updates from its launcher-v* releases
   a GitHub repository   https://github.com/<owner>/<repo>: game versions from
                         its releases and main branch, launcher updates from
-                        its launcher-v* releases (the default)
+                        its launcher-v* releases
   an update file        an https:// address or a path ending in .json:
                         {"source": "<git address of the game's source>",
                          "launcher": {"version": "1.0.0", "url": "<installer>",
@@ -39,11 +42,13 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 
-from . import REPO, __version__
+from urllib.parse import quote
+
+from . import HOME_URL, __version__
 
 API = "https://api.github.com"
 LAUNCHER_TAG = "launcher-v"
-DEFAULT_SOURCE = f"https://github.com/{REPO}"
+DEFAULT_SOURCE = HOME_URL
 
 
 class UpdateError(Exception):
@@ -77,17 +82,21 @@ class LauncherRelease:
 
 @dataclass
 class Source:
-    # "github", "manifest" or "git"
+    # "gitlab", "github", "manifest" or "git"
     kind: str
     # The git address, folder or bundle to fetch the game's source from.
     git: str
-    # owner/repo, for kind "github"
+    # owner/repo, for kind "github" or "gitlab"
     repo: str = ""
+    # https://gitlab.example.org, for kind "gitlab"
+    host: str = ""
     # The update file, for kind "manifest"
     manifest: str = ""
 
 
 _GITHUB = re.compile(r"^https://github\.com/([\w.-]+/[\w.-]+?)(?:\.git)?/?$", re.I)
+# gitlab.com, or any host with "gitlab" in its name; groups can nest.
+_GITLAB = re.compile(r"^(https://[^/]*gitlab[^/]*)/((?:[\w.-]+/)+[\w.-]+?)(?:\.git)?/?$", re.I)
 
 
 def parse_source(text: str) -> Source:
@@ -95,6 +104,10 @@ def parse_source(text: str) -> Source:
     m = _GITHUB.match(s)
     if m:
         return Source("github", f"https://github.com/{m.group(1)}.git", repo=m.group(1))
+    m = _GITLAB.match(s.split("/-/", 1)[0])  # a page inside it: .../-/tree/main
+    if m:
+        host, repo = m.group(1).rstrip("/"), m.group(2)
+        return Source("gitlab", f"{host}/{repo}.git", repo=repo, host=host)
     if s.lower().split("?")[0].endswith(".json"):
         return Source("manifest", "", manifest=s)
     return Source("git", s)
@@ -123,6 +136,23 @@ def _get(path: str, timeout: float = 15.0):
         raise UpdateError(f"GitHub answered {e.code} for {path}")
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         raise UpdateError(f"could not reach GitHub: {getattr(e, 'reason', e)}")
+
+
+def _gitlab(src: Source, path: str, timeout: float = 15.0):
+    url = f"{src.host}/api/v4/projects/{quote(src.repo, safe='')}{path}"
+    headers = {}
+    token = os.environ.get("GITLAB_TOKEN")
+    if token:
+        headers["PRIVATE-TOKEN"] = token
+    try:
+        with _open(url, timeout, headers) as r:
+            return json.load(r)
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403, 404):
+            raise UpdateError(f"{src.repo} was not found on {src.host} (is it private?)")
+        raise UpdateError(f"GitLab answered {e.code} for {path}")
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        raise UpdateError(f"could not reach GitLab: {getattr(e, 'reason', e)}")
 
 
 def read_manifest(where: str, timeout: float = 15.0) -> dict:
@@ -226,6 +256,8 @@ def latest_game(channel: str = "release", prereleases: bool = False,
                 source: str = "") -> GameVersion:
     src = parse_source(source)
     if src.kind != "github":
+        # GitLab too: its version tags are the releases, and a tag needs no
+        # release page to be built.
         git = _git_source(src)
         return from_refs(ls_remote(git), git, channel, prereleases)
     if channel == "main":
@@ -262,6 +294,20 @@ def latest_launcher(source: str = "") -> LauncherRelease | None:
     """The newest launcher release, if it is newer than this launcher."""
     src = parse_source(source)
     if src.kind == "git":
+        return None
+    if src.kind == "gitlab":
+        for r in _gitlab(src, "/releases?per_page=30"):
+            tag = r.get("tag_name", "")
+            if r.get("upcoming_release") or not tag.startswith(LAUNCHER_TAG):
+                continue
+            version = tag[len(LAUNCHER_TAG):]
+            if not is_newer(version, __version__):
+                return None
+            links = (r.get("assets") or {}).get("links") or []
+            exe = next((a for a in links if a.get("name", "").lower().endswith(".exe")), None)
+            url = exe.get("direct_asset_url") or exe.get("url", "") if exe else ""
+            page = (r.get("_links") or {}).get("self", f"{src.host}/{src.repo}/-/releases")
+            return LauncherRelease(version, url, page, r.get("description") or "")
         return None
     if src.kind == "manifest":
         info = read_manifest(src.manifest).get("launcher")

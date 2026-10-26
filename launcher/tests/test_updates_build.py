@@ -28,7 +28,7 @@ def test_release_channel_skips_launcher_and_drafts(monkeypatch):
         "/repos/Unowa001/AnimaniacsRecompiled/releases": rels,
         "/repos/Unowa001/AnimaniacsRecompiled/commits/v0.2.0": {"sha": "1" * 40},
     }))
-    v = updates.latest_game("release")
+    v = updates.latest_game("release", source="https://github.com/Unowa001/AnimaniacsRecompiled")
     assert (v.name, v.ref, v.fell_back) == ("v0.2.0", "refs/tags/v0.2.0", False)
 
 
@@ -37,7 +37,7 @@ def test_release_channel_falls_back_to_main(monkeypatch):
         "/repos/Unowa001/AnimaniacsRecompiled/releases": [],
         "/repos/Unowa001/AnimaniacsRecompiled/commits/main": MAIN,
     }))
-    v = updates.latest_game("release")
+    v = updates.latest_game("release", source="https://github.com/Unowa001/AnimaniacsRecompiled")
     assert v.fell_back and v.name == "main-abcdef1" and v.notes == "Faster level loads"
 
 
@@ -46,10 +46,10 @@ def test_launcher_update(monkeypatch):
             {"tag_name": "launcher-v9.0.0", "html_url": "p",
              "assets": [{"name": "AnimaniacsLauncherSetup-9.0.0.exe", "browser_download_url": "d"}]}]
     monkeypatch.setattr(updates, "_get", fake_get({"/repos/": rels}))
-    lr = updates.latest_launcher()
+    lr = updates.latest_launcher("https://github.com/a/b")
     assert lr and lr.version == "9.0.0" and lr.installer_url == "d"
     rels[1]["tag_name"] = "launcher-v0.0.1"
-    assert updates.latest_launcher() is None
+    assert updates.latest_launcher("https://github.com/a/b") is None
 
 
 def test_install_and_prune(tmp_path):
@@ -160,7 +160,11 @@ def _repo(tmp_path):
 
 
 def test_parse_source():
-    assert updates.parse_source("").repo == "Unowa001/AnimaniacsRecompiled"
+    d = updates.parse_source("")
+    assert (d.kind, d.repo, d.git) == ("gitlab", "unowa001/animaniacs-remastered",
+                                       "https://gitlab.com/unowa001/animaniacs-remastered.git")
+    t = updates.parse_source("https://gitlab.com/g/sub/proj/-/tree/main")
+    assert (t.kind, t.repo, t.host) == ("gitlab", "g/sub/proj", "https://gitlab.com")
     assert updates.parse_source("https://github.com/a/b.git").kind == "github"
     assert updates.parse_source("https://example.org/ani/update.json").kind == "manifest"
     assert updates.parse_source("https://codeberg.org/a/b.git").kind == "git"
@@ -220,3 +224,15 @@ def test_download_checks_sha256(tmp_path):
     with pytest.raises(updates.UpdateError, match="sha256"):
         updates.download(url, str(tmp_path / "b.exe"), sha256="0" * 64)
     assert not os.path.exists(tmp_path / "b.exe")
+
+
+def test_gitlab_launcher_release(monkeypatch):
+    rels = [{"tag_name": "v1.0.0"},
+            {"tag_name": "launcher-v9.0.0", "description": "n", "_links": {"self": "p"},
+             "assets": {"links": [{"name": "AnimaniacsLauncherSetup-9.0.0.exe", "url": "u",
+                                   "direct_asset_url": "d"}]}}]
+    seen = []
+    monkeypatch.setattr(updates, "_gitlab", lambda src, path: seen.append((src.repo, path)) or rels)
+    lr = updates.latest_launcher("")
+    assert lr and (lr.version, lr.installer_url, lr.page_url) == ("9.0.0", "d", "p")
+    assert seen[0] == ("unowa001/animaniacs-remastered", "/releases?per_page=30")
