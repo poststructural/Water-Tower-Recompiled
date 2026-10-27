@@ -1191,7 +1191,7 @@ class App:
             if messagebox.askokcancel("Update the launcher",
                                       f"Run {os.path.basename(path)} to update the launcher? "
                                       "The launcher closes while it installs."):
-                subprocess.Popen([path, "/SILENT"])
+                subprocess.Popen([path, "/SILENT", "/UPDATE"])
                 self.root.destroy()
             return
 
@@ -1268,7 +1268,7 @@ class App:
             return updates.download(lr.installer_url, dest, self._progress, lr.sha256)
 
         def done(path):
-            subprocess.Popen([path, "/SILENT"])
+            subprocess.Popen([path, "/SILENT", "/UPDATE"])
             self.root.destroy()
         self._run(f"Downloading launcher {lr.version}", work, done)
 
