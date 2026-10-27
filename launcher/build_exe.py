@@ -23,7 +23,11 @@ def main() -> int:
         "--icon", os.path.join("animaniacs_launcher", "assets", "icon.ico"),
         "--add-data", os.pathsep.join([os.path.join("animaniacs_launcher", "assets")] * 2),
         "run_launcher.py"])
-    iscc = shutil.which("iscc") or r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+    # On PATH, or where Inno Setup installs for all users or (winget) just you.
+    iscc = shutil.which("iscc") or next((
+        p for p in (r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+                    os.path.expandvars(r"%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe"))
+        if os.path.isfile(p)), "")
     if sys.platform == "win32" and os.path.isfile(iscc):
         subprocess.check_call([iscc, f"/DAppVersion={__version__}",
                                os.path.join("installer", "AnimaniacsLauncher.iss")])
