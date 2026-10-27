@@ -387,7 +387,7 @@ def _build(version, game_dir: str, settings: config.Settings, log: Log,
     if not os.path.isfile(exe):
         raise BuildError(f"the build finished without producing {EXE}")
     dest = install(version, bdir, carry_from=settings.current_build)
-    log(f"== Built {version.name} in {int(time.time() - started) // 60} min")
+    log(f"== Built {version.name} in {max(1, round((time.time() - started) / 60))} min")
     return dest
 
 

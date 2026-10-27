@@ -41,7 +41,7 @@ The Vulkan build is the one to play; the MSVC build is kept as a reference.
 The easiest way to play: install the launcher
 (`AnimaniacsLauncherSetup-<v>.exe` from the releases), point it at your disc
 image or game folder, and it builds the game on your PC and keeps it updated
-from GitHub. See [launcher/README.md](launcher/README.md).
+from GitLab. See [launcher/README.md](launcher/README.md).
 
 ## The game binary
 
