@@ -48,7 +48,9 @@ The log (stdout, or the launcher's game log) shows what is sent and received:
   Progression items are in color. Each lasts four seconds; when more come at once
   than fit, the last line counts the rest. Items that arrived while the game was
   closed are one popup: "Received 14 items". Other games' names come from the room's
-  data packages, cached in `<save dir>/archipelago/datapackage/`.
+  data packages, cached in `<save dir>/archipelago/datapackage/`. `HINT` (violet) for
+  a hint about one of your items or checks that isn't found yet, and `CHAT` (green) for
+  chat, server messages and countdowns (these can be turned off on their own).
 - **Edgar counter**, bottom left: Edgars received and the number the goal wants, with
   a light: green connected, amber reconnecting, red offline.
 - **Tracker**: Tab or F1, or hold Back on the controller for half a second. The game

@@ -470,6 +470,7 @@ class App:
         self.ap_switches = {}
         for name, label, text in (
                 ("archipelago.notifications", "In game", "Popups for items sent and received"),
+                ("archipelago.chat", "", "Chat and server messages as popups"),
                 ("archipelago.tracker", "", "Tracker screen (Tab, F1, or hold Back)"),
                 ("archipelago.hud", "", "Edgar counter")):
             var = tk.BooleanVar(value=True)

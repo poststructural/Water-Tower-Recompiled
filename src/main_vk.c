@@ -491,7 +491,8 @@ int main(int argc, char **argv)
         ani_settings_load(&s_settings, exe, save);
         ani_skip_intro = s_settings.skip_intro;
         ani_hud_43 = !s_settings.hud_stretch;
-        ani_hud_configure(s_settings.ap_notifications, s_settings.ap_tracker, s_settings.ap_hud);
+        ani_hud_configure(s_settings.ap_notifications, s_settings.ap_tracker, s_settings.ap_hud,
+                          s_settings.ap_chat);
         printf("Settings: %s\n", s_settings.path);
     }
 

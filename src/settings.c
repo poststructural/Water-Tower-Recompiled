@@ -71,6 +71,8 @@ static const char DEFAULT_INI[] =
     "; During an Archipelago session: popups for items sent and received,\n"
     "; the tracker screen (Tab, F1, or hold Back), and the Edgar counter\n"
     "notifications = on\n"
+    "; Chat and server messages as popups too (hints about you always show)\n"
+    "chat = on\n"
     "tracker = on\n"
     "hud = on\n";
 
@@ -150,6 +152,8 @@ static void apply(AniSettings *s, const char *section, const char *key,
             s->ap_tracker = truthy(val);
         else if (!strcmp(key, "hud"))
             s->ap_hud = truthy(val);
+        else if (!strcmp(key, "chat"))
+            s->ap_chat = truthy(val);
     }
 }
 
@@ -186,7 +190,7 @@ void ani_settings_load(AniSettings *s, const char *exe_dir, const char *save_dir
     s->render_scale = 0;
     s->max_render_scale = 6;
     s->msaa = 1;
-    s->ap_notifications = s->ap_tracker = s->ap_hud = 1;
+    s->ap_notifications = s->ap_tracker = s->ap_hud = s->ap_chat = 1;
     snprintf(s->texture_filter, sizeof s->texture_filter, "smooth");
 
     snprintf(path, sizeof path, "%ssettings.ini", exe_dir);

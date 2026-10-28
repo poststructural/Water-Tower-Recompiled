@@ -557,9 +557,21 @@ static void on_print(const AjValue *p)
         ajb_raw(&b, name ? name : text);
     }
     if (b.buf && b.len) LOG("%s", b.buf);
+    const char *kind = aj_str(aj_get(p, "type"), "");
+    if (!strcmp(kind, "ItemSend") || !strcmp(kind, "ItemCheat")) {
+        on_item_send(p);
+    } else if (b.buf && b.len) {
+        /* Chat, the server's messages and countdowns as they are; hints only
+         * when they are about us and not found yet. */
+        const AjValue *it = aj_get(p, "item");
+        bool about_us = aj_int(aj_get(p, "receiving"), 0) == S.our_slot ||
+                        aj_int(aj_get(it, "player"), 0) == S.our_slot;
+        if (!strcmp(kind, "Hint") && about_us && !aj_bool(aj_get(p, "found"), false))
+            toast(ANI_UI_HINT, false, b.buf);
+        else if (!strcmp(kind, "Chat") || !strcmp(kind, "ServerChat") || !strcmp(kind, "Countdown"))
+            toast(ANI_UI_CHAT, false, b.buf);
+    }
     ajb_free(&b);
-    if (!strcmp(aj_str(aj_get(p, "type"), ""), "ItemSend") ||
-        !strcmp(aj_str(aj_get(p, "type"), ""), "ItemCheat")) on_item_send(p);
 }
 
 static void handle_packet(const AjValue *p, uint64_t generation)

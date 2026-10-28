@@ -39,13 +39,14 @@ extern uint32_t xbox_InputGetState(uint32_t port, void *state);
 
 #define HOLD_MS 500
 
-static bool s_notify = true, s_tracker = true, s_counter = true;
+static bool s_notify = true, s_tracker = true, s_counter = true, s_chat = true;
 
-void ani_hud_configure(bool notifications, bool tracker, bool counter)
+void ani_hud_configure(bool notifications, bool tracker, bool counter, bool chat)
 {
     s_notify = notifications;
     s_tracker = tracker;
     s_counter = counter;
+    s_chat = chat;
 }
 
 /* ── Colors (0xAARRGGBB) ───────────────────────────────────── */
@@ -60,6 +61,8 @@ void ani_hud_configure(bool notifications, bool tracker, bool counter)
 #define C_AMBER   0xFFFFB347u
 #define C_RED     0xFFFF5C5Cu
 #define C_ROW     0xFF2C3050u
+#define C_VIOLET  0xFFC58CFFu
+#define C_MINT    0xFF7FE0C8u
 
 /* ── Input ─────────────────────────────────────────────────── */
 
@@ -141,12 +144,24 @@ static void fit(char *out, size_t n, const char *text, int size, int max_w)
 
 static uint32_t stripe_of(const AniUiToast *t)
 {
-    return t->kind == ANI_UI_RECEIVED ? C_GOLD : t->kind == ANI_UI_SENT ? C_SKY : C_GREY;
+    switch (t->kind) {
+    case ANI_UI_RECEIVED: return C_GOLD;
+    case ANI_UI_SENT: return C_SKY;
+    case ANI_UI_HINT: return C_VIOLET;
+    case ANI_UI_CHAT: return C_MINT;
+    default: return C_GREY;
+    }
 }
 
 static const char *tag_of(const AniUiToast *t)
 {
-    return t->kind == ANI_UI_RECEIVED ? "GOT" : t->kind == ANI_UI_SENT ? "SENT" : "AP";
+    switch (t->kind) {
+    case ANI_UI_RECEIVED: return "GOT";
+    case ANI_UI_SENT: return "SENT";
+    case ANI_UI_HINT: return "HINT";
+    case ANI_UI_CHAT: return "CHAT";
+    default: return "AP";
+    }
 }
 
 static int draw_toast(Panel *p, const AniUiToast *t, int pw, int ph, int ts)
@@ -293,6 +308,12 @@ int nv2a_hud_rects(NV2AHudRect *rects, int max, int win_w, int win_h)
     if (s_notify && max > 0) {
         AniUiToast t[ANI_UI_SHOWN];
         int k = ani_ui_toasts(t, ANI_UI_SHOWN, ani_ui_now_ms());
+        if (!s_chat) {
+            int m = 0;
+            for (int i = 0; i < k; i++)
+                if (t[i].kind != ANI_UI_CHAT) t[m++] = t[i];
+            k = m;
+        }
         int maxw = win_w * 40 / 100, ph = ts * 2;
         int y = margin;
         if (maxw < ts * 12) maxw = ts * 12;

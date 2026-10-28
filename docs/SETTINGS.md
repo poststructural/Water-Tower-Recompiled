@@ -40,6 +40,7 @@ Only matter during an Archipelago session ([ARCHIPELAGO.md](ARCHIPELAGO.md)).
 | Key | Values | Default | |
 |---|---|---|---|
 | `notifications` | `on`, `off` | `on` | Popups, top right, for items you receive and items your checks send to others. |
+| `chat` | `on`, `off` | `on` | Chat, server messages and countdowns as popups too. Hints about your items or checks always show. |
 | `tracker` | `on`, `off` | `on` | The tracker screen: Tab or F1, or hold the controller's Back for half a second. |
 | `hud` | `on`, `off` | `on` | The Edgar counter, bottom left, with a light for the connection. |
 

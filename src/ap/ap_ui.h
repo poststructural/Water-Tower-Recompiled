@@ -10,7 +10,7 @@
 
 #include "ap_catalog.h"
 
-typedef enum { ANI_UI_RECEIVED, ANI_UI_SENT, ANI_UI_INFO } AniUiKind;
+typedef enum { ANI_UI_RECEIVED, ANI_UI_SENT, ANI_UI_INFO, ANI_UI_HINT, ANI_UI_CHAT } AniUiKind;
 typedef enum { ANI_UI_OFFLINE, ANI_UI_CONNECTING, ANI_UI_CONNECTED } AniUiConn;
 
 #define ANI_UI_SHOWN 4          /* popups on screen at once */

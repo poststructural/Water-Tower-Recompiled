@@ -3,4 +3,4 @@
 #pragma once
 #include <stdbool.h>
 
-void ani_hud_configure(bool notifications, bool tracker, bool counter);
+void ani_hud_configure(bool notifications, bool tracker, bool counter, bool chat);
