@@ -35,20 +35,27 @@ add_subdirectory(${XBOXRECOMP_DIR} ${CMAKE_BINARY_DIR}/xboxrecomp)
 
 # nv2a_vk/shim/hw/xbox/nv2a is a git symlink to nv2a_vk/xemu. A Windows
 # checkout without core.symlinks makes it a text file, and every
-# "hw/xbox/nv2a/..." include fails. Recreate it as a directory junction in the
-# build tree and put that on the include path after the shim.
+# "hw/xbox/nv2a/..." include fails. Copy xemu's headers into the build tree
+# under that name and put it on the include path after the shim. A copy, not
+# a junction: Windows refuses to follow a junction the user made when the
+# process building through it does not trust them ("The path cannot be
+# traversed because it contains an untrusted mount point"), which is how the
+# launcher's builds failed. configure_file re-runs CMake when a header changes.
 if(WIN32 AND NOT IS_DIRECTORY ${XBOXRECOMP_DIR}/src/nv2a_vk/shim/hw/xbox/nv2a)
-    set(_shim ${CMAKE_BINARY_DIR}/nv2a_shim/hw/xbox)
-    file(MAKE_DIRECTORY ${_shim})
-    if(NOT EXISTS ${_shim}/nv2a)
-        file(TO_NATIVE_PATH ${_shim}/nv2a _link)
-        file(TO_NATIVE_PATH ${XBOXRECOMP_DIR}/src/nv2a_vk/xemu _target)
-        execute_process(COMMAND cmd /c mklink /J "${_link}" "${_target}"
-                        OUTPUT_QUIET RESULT_VARIABLE _rc)
-        if(NOT _rc EQUAL 0)
-            message(FATAL_ERROR "could not create the nv2a include junction")
-        endif()
+    set(_xemu ${XBOXRECOMP_DIR}/src/nv2a_vk/xemu)
+    set(_shim ${CMAKE_BINARY_DIR}/nv2a_shim/hw/xbox/nv2a)
+    # An older build tree has a junction here: remove the link itself, never
+    # what it points at (rmdir on a junction only unlinks it).
+    if(IS_SYMLINK ${_shim} OR (EXISTS ${_shim} AND NOT EXISTS ${_shim}/.copied))
+        file(TO_NATIVE_PATH ${_shim} _old)
+        execute_process(COMMAND cmd /c rmdir "${_old}" OUTPUT_QUIET ERROR_QUIET)
     endif()
+    file(GLOB_RECURSE _headers CONFIGURE_DEPENDS RELATIVE ${_xemu}
+         ${_xemu}/*.h ${_xemu}/*.inc)
+    foreach(_h IN LISTS _headers)
+        configure_file(${_xemu}/${_h} ${_shim}/${_h} COPYONLY)
+    endforeach()
+    file(WRITE ${_shim}/.copied "")
     target_include_directories(xbox_nv2a_vk PRIVATE ${CMAKE_BINARY_DIR}/nv2a_shim)
 endif()
 
