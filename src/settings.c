@@ -65,7 +65,14 @@ static const char DEFAULT_INI[] =
     "\n"
     "[game]\n"
     "; on skips the publisher logos and intro movie at start-up\n"
-    "skip_intro = off\n";
+    "skip_intro = off\n"
+    "\n"
+    "[archipelago]\n"
+    "; During an Archipelago session: popups for items sent and received,\n"
+    "; the tracker screen (Tab, F1, or hold Back), and the Edgar counter\n"
+    "notifications = on\n"
+    "tracker = on\n"
+    "hud = on\n";
 
 static int truthy(const char *v)
 {
@@ -136,6 +143,13 @@ static void apply(AniSettings *s, const char *section, const char *key,
     } else if (!strcmp(section, "game")) {
         if (!strcmp(key, "skip_intro"))
             s->skip_intro = truthy(val);
+    } else if (!strcmp(section, "archipelago")) {
+        if (!strcmp(key, "notifications"))
+            s->ap_notifications = truthy(val);
+        else if (!strcmp(key, "tracker"))
+            s->ap_tracker = truthy(val);
+        else if (!strcmp(key, "hud"))
+            s->ap_hud = truthy(val);
     }
 }
 
@@ -172,6 +186,7 @@ void ani_settings_load(AniSettings *s, const char *exe_dir, const char *save_dir
     s->render_scale = 0;
     s->max_render_scale = 6;
     s->msaa = 1;
+    s->ap_notifications = s->ap_tracker = s->ap_hud = 1;
     snprintf(s->texture_filter, sizeof s->texture_filter, "smooth");
 
     snprintf(path, sizeof path, "%ssettings.ini", exe_dir);

@@ -1,0 +1,135 @@
+diff --git a/xboxrecomp/src/nv2a_vk/host/nv2a_window.h b/xboxrecomp/src/nv2a_vk/host/nv2a_window.h
+index 39f8abb..d986af9 100644
+--- a/xboxrecomp/src/nv2a_vk/host/nv2a_window.h
++++ b/xboxrecomp/src/nv2a_vk/host/nv2a_window.h
+@@ -30,6 +30,14 @@ void nv2a_window_event_hook(const void *sdl_event);
+ bool nv2a_overlay_wanted(void);
+ bool nv2a_overlay_frame(uint32_t *px, int w, int h, const uint32_t *backdrop);
+ 
++/* Panels the title puts over every presented frame while the game runs
++ * (notifications, a counter): each opaque, 0xAARRGGBB rows top-down, at x, y
++ * in the window's pixels (win_w x win_h); the pixels stay the title's and
++ * must last until the next call. Returns how many it filled in, at most max.
++ * Weak; runs on the renderer's thread once per present. */
++typedef struct { int x, y, w, h; const uint32_t *argb; } NV2AHudRect;
++int nv2a_hud_rects(NV2AHudRect *rects, int max, int win_w, int win_h);
++
+ /* Settings the overlay can change; they take effect as it closes. aspect as
+  * for nv2a_window_create; width/height 0 keep the size. */
+ void nv2a_window_request(int width, int height, int fullscreen);
+diff --git a/xboxrecomp/src/nv2a_vk/host/present_sdl.c b/xboxrecomp/src/nv2a_vk/host/present_sdl.c
+index 7365af0..229d92f 100644
+--- a/xboxrecomp/src/nv2a_vk/host/present_sdl.c
++++ b/xboxrecomp/src/nv2a_vk/host/present_sdl.c
+@@ -157,6 +157,12 @@ static VmaAllocation s_ovl_mem[FRAMES_IN_FLIGHT];
+ static uint8_t *s_ovl_ptr[FRAMES_IN_FLIGHT];
+ #define OVL_MAX_W 1600
+ #define OVL_MAX_H 160
++/* The title's HUD panels (nv2a_hud_rects), packed one after another. */
++static VkBuffer s_hud_buf[FRAMES_IN_FLIGHT];
++static VmaAllocation s_hud_mem[FRAMES_IN_FLIGHT];
++static uint8_t *s_hud_ptr[FRAMES_IN_FLIGHT];
++#define HUD_BYTES (2048u * 1024u * 4u)
++#define HUD_MAX_RECTS 8
+ 
+ static const struct { char c; uint8_t rows[7]; } s_glyphs[] = {
+     { '0', { 0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E } },
+@@ -329,9 +335,63 @@ static void fps_init(PGRAPHVkState *r)
+             continue;
+         }
+         s_ovl_ptr[i] = info.pMappedData;
++        bi.size = HUD_BYTES;
++        if (vmaCreateBuffer(r->allocator, &bi, &ai, &s_hud_buf[i],
++                            &s_hud_mem[i], &info) != VK_SUCCESS) {
++            s_hud_buf[i] = VK_NULL_HANDLE;
++            continue;
++        }
++        s_hud_ptr[i] = info.pMappedData;
+     }
+ }
+ 
++__attribute__((weak)) int nv2a_hud_rects(NV2AHudRect *rects, int max, int win_w, int win_h)
++{
++    (void)rects; (void)max; (void)win_w; (void)win_h;
++    return 0;
++}
++
++/* Copies the title's panels into frame f's buffer, clipped to the window;
++ * returns the copy regions. */
++static uint32_t hud_pack(unsigned f, VkBufferImageCopy *regions)
++{
++    NV2AHudRect rects[HUD_MAX_RECTS];
++    int ww = (int)s_extent.width, wh = (int)s_extent.height;
++    int n = nv2a_hud_rects(rects, HUD_MAX_RECTS, ww, wh);
++    uint32_t *dst = (uint32_t *)s_hud_ptr[f], used = 0, nr = 0;
++    bool swap = s_format == VK_FORMAT_R8G8B8A8_UNORM;
++    if (n > HUD_MAX_RECTS) n = HUD_MAX_RECTS;
++    for (int k = 0; k < n; k++) {
++        NV2AHudRect *r = &rects[k];
++        int x0 = r->x < 0 ? 0 : r->x, y0 = r->y < 0 ? 0 : r->y;
++        int x1 = r->x + r->w > ww ? ww : r->x + r->w;
++        int y1 = r->y + r->h > wh ? wh : r->y + r->h;
++        if (!r->argb || x1 <= x0 || y1 <= y0) continue;
++        uint32_t cw = (uint32_t)(x1 - x0), ch = (uint32_t)(y1 - y0);
++        if ((used + cw * ch) * 4u > HUD_BYTES) break;
++        for (uint32_t j = 0; j < ch; j++) {
++            const uint32_t *src = r->argb + (size_t)(y0 - r->y + (int)j) * r->w + (x0 - r->x);
++            uint32_t *d = dst + used + j * cw;
++            if (swap)
++                for (uint32_t i = 0; i < cw; i++) {
++                    uint32_t c = src[i];
++                    d[i] = (c & 0xFF00FF00u) | (c >> 16 & 0xFF) | (c & 0xFF) << 16;
++                }
++            else
++                memcpy(d, src, cw * 4u);
++        }
++        regions[nr++] = (VkBufferImageCopy){
++            .bufferOffset = (VkDeviceSize)used * 4u,
++            .bufferRowLength = cw,
++            .imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 },
++            .imageOffset = { x0, y0, 0 },
++            .imageExtent = { cw, ch, 1 },
++        };
++        used += cw * ch;
++    }
++    return nr;
++}
++
+ /* ---- Window (host main thread) ---- */
+ 
+ /* Display modes: 0 a window, 1 fullscreen (the desktop's), 2 borderless
+@@ -1438,6 +1498,20 @@ static void present_locked(PGRAPHState *pg, bool on_pfifo)
+                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+     }
+ 
++    if (s_hud_ptr[f]) {
++        VkBufferImageCopy regions[HUD_MAX_RECTS];
++        uint32_t nr = hud_pack(f, regions);
++        if (nr) {
++            vmaFlushAllocation(r->allocator, s_hud_mem[f], 0, VK_WHOLE_SIZE);
++            barrier(cmd, s_images[idx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
++                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT,
++                    VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
++                    VK_PIPELINE_STAGE_TRANSFER_BIT);
++            vkCmdCopyBufferToImage(cmd, s_hud_buf[f], s_images[idx],
++                                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, nr, regions);
++        }
++    }
++
+     barrier(cmd, s_images[idx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+             VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_ACCESS_TRANSFER_WRITE_BIT, 0,
+             VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+@@ -1492,9 +1566,12 @@ void nv2a_host_vk_finalize(PGRAPHState *pg)
+     for (int i = 0; i < MAX_HALVINGS; i++)
+         if (s_half[i])
+             vmaDestroyImage(r->allocator, s_half[i], s_half_mem[i]);
+-    for (int i = 0; i < FRAMES_IN_FLIGHT; i++)
++    for (int i = 0; i < FRAMES_IN_FLIGHT; i++) {
+         if (s_ovl_buf[i])
+             vmaDestroyBuffer(r->allocator, s_ovl_buf[i], s_ovl_mem[i]);
++        if (s_hud_buf[i])
++            vmaDestroyBuffer(r->allocator, s_hud_buf[i], s_hud_mem[i]);
++    }
+     if (s_pool)
+         vkDestroyCommandPool(r->device, s_pool, NULL);
+     s_pool = VK_NULL_HANDLE;

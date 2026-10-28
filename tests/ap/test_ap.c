@@ -463,6 +463,12 @@ static void test_names(const char *dir)
     feed("[{\"cmd\":\"PrintJSON\",\"type\":\"ItemSend\",\"receiving\":2,"
          "\"item\":{\"item\":12345,\"location\":5,\"player\":1,\"flags\":0},\"data\":[]}]");
     CHECK(ani_ui_toasts(t, 8, ani_ui_now_ms()) == 1 && !strcmp(t[0].text, "an item for Sam"));
+    ani_ui_clear();
+    snprintf(pkt, sizeof pkt, "[{\"cmd\":\"PrintJSON\",\"type\":\"ItemSend\",\"receiving\":1,"
+             "\"item\":{\"item\":%lld,\"location\":%lld,\"player\":1,\"flags\":1},\"data\":[]}]",
+             (long long)ANI_AP_EDGAR_ITEM, (long long)loc_named("Ye Old West: Rodeo Edgar"));
+    feed(pkt);
+    CHECK(ani_ui_toasts(t, 8, ani_ui_now_ms()) == 1 && !strcmp(t[0].text, "Edgar (Rodeo Edgar)"));
 
     /* Items that came while away: one popup with the count. */
     ani_ui_clear();
@@ -481,6 +487,12 @@ static void test_names(const char *dir)
         ajb_free(&b);
     }
     CHECK(ani_ui_toasts(t, 8, ani_ui_now_ms()) == 1 && !strcmp(t[0].text, "Received 7 items"));
+    /* The first item a fresh slot gets while playing also comes at index 0:
+     * that one is PrintJSON's to announce, not a summary. */
+    ani_ui_clear();
+    S.item_count = 0;
+    feed("[{\"cmd\":\"ReceivedItems\",\"index\":0,\"items\":[{\"item\":1095630849,\"location\":0,\"player\":2,\"flags\":1}]}]");
+    CHECK(S.item_count == 1 && ani_ui_toasts(t, 8, ani_ui_now_ms()) == 0);
     S.generation = 0;
     puts("names ok");
 }

@@ -20,6 +20,8 @@ typedef struct AniSettings {
     char texture_filter[16];
     /* [game] */
     int skip_intro;
+    /* [archipelago]: the in-game overlay during a session */
+    int ap_notifications, ap_tracker, ap_hud;
     char path[4200];        /* where the file was read from */
 } AniSettings;
 

@@ -37,6 +37,7 @@
 #include "nv2a_vk_runtime.h"
 #include "nv2a_window.h"
 #include "settings.h"
+#include "ap/ap_hud.h"
 #define SDL_MAIN_HANDLED   /* our own main(), not SDL_main */
 #include <SDL.h>
 #include "ap/ap_bridge.h"
@@ -490,6 +491,7 @@ int main(int argc, char **argv)
         ani_settings_load(&s_settings, exe, save);
         ani_skip_intro = s_settings.skip_intro;
         ani_hud_43 = !s_settings.hud_stretch;
+        ani_hud_configure(s_settings.ap_notifications, s_settings.ap_tracker, s_settings.ap_hud);
         printf("Settings: %s\n", s_settings.path);
     }
 

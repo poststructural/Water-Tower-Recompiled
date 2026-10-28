@@ -76,6 +76,7 @@ set(ANI_AP_SOURCES
     ${ANI_ROOT}/src/ap/ap_ui.c
     ${ANI_ROOT}/src/ap/ap_names.c
     ${ANI_ROOT}/src/ap/ap_font.c
+    ${ANI_ROOT}/src/ap/ap_hud.c
     ${ANI_ROOT}/src/ap/ap_json.c
     ${ANI_ROOT}/src/ap/ap_net.c
     ${ANI_ROOT}/src/ap/ap_ws_posix.c

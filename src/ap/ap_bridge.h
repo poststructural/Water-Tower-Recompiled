@@ -19,6 +19,8 @@ typedef void (*ani_gen_fn)(void);
  * save_dir. */
 const char *ani_ap_init(int *argc, char **argv, const char *save_dir);
 bool ani_ap_active(void);
+/* Whether this game has found that location (any thread; may lag a frame). */
+bool ani_ap_checked(long long location);
 
 /* Once per main-loop iteration (0x000B09A0, menus included): network and
  * item grants. */

@@ -68,6 +68,7 @@ static struct {
     /* session */
     uint64_t generation;   /* of the connection that sent Connected; 0 if none */
     bool goal_sent;
+    bool synced;           /* the inventory after Connected (or a Sync) is in */
     bool dirty;
     bool refused;
     int our_slot;
@@ -356,6 +357,7 @@ static void on_received_items(const AjValue *p)
 
     if (index != 0 && index != S.item_count) {
         LOG("item index %lld, expected %d: resyncing", (long long)index, S.item_count);
+        S.synced = false;
         send_cmd("[{\"cmd\":\"Sync\"}]");
         send_pending();
         return;
@@ -368,10 +370,11 @@ static void on_received_items(const AjValue *p)
     recount();
     if (S.item_count != before || S.edgars != old_edgars || S.ap_bits != old_bits)
         save_sidecar();
-    if (index != 0) {
+    if (index != 0 || S.synced) {
         for (int i = before; i < S.item_count; i++)
             LOG("received %s", item_name(S.items[i]));
     } else {
+        S.synced = true;
         LOG("inventory: %d Edgars, abilities 0x%03X (%d items)", S.edgars, S.ap_bits, S.item_count);
         /* What came while the game was away is one popup, not a flood (the
          * ones that arrive while connected get theirs from PrintJSON). */
@@ -446,8 +449,14 @@ static void on_item_send(const AjValue *p)
     int64_t item = aj_int(aj_get(it, "item"), 0);
     bool prog = (aj_int(aj_get(it, "flags"), 0) & 1) != 0;
     char t[160];
-    if (to == S.our_slot && from == S.our_slot)
-        snprintf(t, sizeof t, "%s", any_item_name(to, item));
+    if (to == S.our_slot && from == S.our_slot) {
+        const char *where = location_name(aj_int(aj_get(it, "location"), 0));
+        const char *c = where ? strstr(where, ": ") : NULL;
+        if (where)
+            snprintf(t, sizeof t, "%s (%s)", any_item_name(to, item), c ? c + 2 : where);
+        else
+            snprintf(t, sizeof t, "%s", any_item_name(to, item));
+    }
     else if (to == S.our_slot)
         snprintf(t, sizeof t, "%s from %s", any_item_name(to, item), player_name(from));
     else if (from == S.our_slot)
@@ -472,6 +481,7 @@ static void on_connected(const AjValue *p, uint64_t generation)
     }
     S.generation = generation;
     S.goal_sent = false;
+    S.synced = false;
     S.our_slot = (int)aj_int(aj_get(p, "slot"), 0);
     for (const AjValue *c = aj_get(p, "players") ? aj_get(p, "players")->child : NULL; c; c = c->next) {
         int64_t slot = aj_int(aj_get(c, "slot"), 0);
@@ -548,7 +558,8 @@ static void on_print(const AjValue *p)
     }
     if (b.buf && b.len) LOG("%s", b.buf);
     ajb_free(&b);
-    if (!strcmp(aj_str(aj_get(p, "type"), ""), "ItemSend")) on_item_send(p);
+    if (!strcmp(aj_str(aj_get(p, "type"), ""), "ItemSend") ||
+        !strcmp(aj_str(aj_get(p, "type"), ""), "ItemCheat")) on_item_send(p);
 }
 
 static void handle_packet(const AjValue *p, uint64_t generation)
@@ -753,6 +764,8 @@ const char *ani_ap_init(int *argc, char **argv, const char *save_dir)
 }
 
 bool ani_ap_active(void) { return S.bound; }
+
+bool ani_ap_checked(long long location) { return set_has(&S.checked, location); }
 
 /* ── Hooks ─────────────────────────────────────────────────── */
 
