@@ -32,47 +32,78 @@ _Thread_local uint32_t g_eax, g_esp;
 #define ENTRIES 0x00502000u
 #define NAMES   0x00503000u
 #define VALUES  0x00504000u
+#define OBJECTS 0x00520000u     /* fake pickup objects, 0x200 apart */
 #define STACK   0x00600000u
 
 static void guest_init(void)
 {
     uint8_t *mem = calloc(1, 0x04000000);
-    const char *names[] = { "Objecttype", "OscarPickupsCollected" };
+    const char *names[] = { "Objecttype", "OscarPickupsCollected", "MajorPickupsCollected" };
     uint32_t at = NAMES;
     CHECK(mem);
     g_xbox_mem_offset = (ptrdiff_t)(uintptr_t)mem;
     G32(ANI_G_SCRIPT_STORE) = STORE;
     G32(STORE + 0x1C) = TABLE;
     G32(STORE + 0x24) = VALUES;
-    *(uint16_t *)((uintptr_t)mem + TABLE + 4) = 2;
+    *(uint16_t *)((uintptr_t)mem + TABLE + 4) = 3;
     G32(TABLE + 8) = ENTRIES;
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 3; i++) {
         strcpy((char *)mem + at, names[i]);
         G32(ENTRIES + i * 0x18u) = at;
         *(uint16_t *)((uintptr_t)mem + ENTRIES + i * 0x18u + 4) = 2;
         at += 64;
     }
-    /* The pickup code's counter is the same float (assumed; see the docs). */
-    G32(ANI_G_EDGAR_COUNTER) = VALUES + 16;
     g_esp = STACK;
+}
+
+/* A pickup object as 0x00027E00 sees it: name, state 0 (waiting), type. */
+static uint32_t make_pickup(int n, const char *name, uint32_t type)
+{
+    uint32_t obj = OBJECTS + (uint32_t)n * 0x200u;
+    strcpy((char *)((uintptr_t)g_xbox_mem_offset + obj + 0x180), name);
+    G32(obj + ANI_G_OBJ_NAME) = obj + 0x180;
+    G32(obj + ANI_G_PICKUP_STATE) = 0;
+    G32(obj + ANI_G_PICKUP_TYPE) = type;
+    return obj;
 }
 
 static void set_level(int lv) { G32(ANI_G_LEVEL_INDEX) = (uint32_t)(lv + ANI_G_LEVEL_BIAS); }
 static float *edgar_var(void) { return (float *)((uintptr_t)g_xbox_mem_offset + VALUES + 16); }
+static float *major_var(void) { return (float *)((uintptr_t)g_xbox_mem_offset + VALUES + 32); }
 
 /* Each fake body ends like a generated one: its ret pops the return address. */
 #define RET() (g_esp += 4)
 
-static void gen_frame(void)
+static void gen_frame(void) { RET(); }
+/* The pickup's own update: an Edgar goes straight to state 4, a counted
+ * pickup (type 1) to state 3 once its counter is up; a waiting one stays. */
+static void gen_pickup_collect(void)
 {
-    RET();
-    if (*(uint8_t *)((uintptr_t)g_xbox_mem_offset + ANI_G_EDGAR_PENDING)) {
-        *edgar_var() += 1.0f;
-        *(uint8_t *)((uintptr_t)g_xbox_mem_offset + ANI_G_EDGAR_PENDING) = 0;
+    uint32_t obj = G32(g_esp + 4);
+    if (G32(obj + ANI_G_PICKUP_TYPE) == 1) {
+        *major_var() += 1.0f;
+        G32(obj + ANI_G_PICKUP_STATE) = 3;
+    } else {
+        G32(obj + ANI_G_PICKUP_STATE) = 4;
     }
+    RET();
 }
-static void gen_pickup_edgar(void) { *edgar_var() += 1.0f; RET(); }
-static void gen_pickup_other(void) { RET(); }
+static void gen_pickup_wait(void) { RET(); }
+
+static void pickup(uint32_t obj, ani_gen_fn body)
+{
+    g_esp = STACK;
+    G32(g_esp + 4) = obj;
+    ani_ap_hook_pickup(body);
+    CHECK(g_esp == STACK + 4);
+}
+
+static int64_t loc_named(const char *name)
+{
+    for (int i = 0; i < ANI_AP_NAMES; i++)
+        if (!strcmp(ani_ap_location_names[i].name, name)) return ani_ap_location_names[i].id;
+    FAIL("no location %s", name);
+}
 static void gen_give(void)
 {
     *(uint16_t *)((uintptr_t)g_xbox_mem_offset + ANI_G_ABILITIES) |= (uint16_t)G32(g_esp + 4);
@@ -148,7 +179,18 @@ static void test_game(void)
     *edgar_var() = 3.0f;
     CHECK(ani_game_script_var("OscarPickupsCollected", &v) && v == 3.0f);
     CHECK(!ani_game_script_var("Nope", &v));
-    CHECK(ani_game_edgar_counter(&v) && v == 3.0f);
+    {
+        char name[64];
+        uint32_t obj = make_pickup(0, "Edgar_Bronco", 3);
+        CHECK(ani_game_object_name(obj, name, sizeof name) && !strcmp(name, "Edgar_Bronco"));
+        CHECK(ani_game_pickup_type(obj) == 3 && ani_game_pickup_state(obj) == 0);
+        CHECK(ani_game_pickup_state(0) == 0xFFFFu);
+        CHECK(!ani_stricmp("ACME_a", "acme_A") && ani_strnicmp("edgar_125_07", "Edgar_125_", 10) == 0);
+    }
+    /* Every location the catalog names has its own ID, inside the span. */
+    for (int i = 1; i < ANI_AP_NAMES; i++)
+        CHECK(ani_ap_location_names[i].id > ani_ap_location_names[i - 1].id &&
+              loc_ok(ani_ap_location_names[i].id));
     G32(ANI_G_LEVEL_RECORDS + 2 * ANI_G_LEVEL_RECORD + ANI_G_RECORD_EDGARS) = 5u << 4;
     CHECK(ani_game_record_edgars(2) == 5);
     /* Without a session the hooks are the game's own code. */
@@ -163,9 +205,9 @@ static void test_game(void)
 static bool connected(void) { return S.generation != 0; }
 static bool all_acked(void)
 {
-    for (int i = 0; i < S.checked.n; i++)
-        if (!set_has(&S.acked, S.checked.v[i])) return false;
-    return S.checked.n > 0;
+    bool all = true;
+    SET_EACH(&S.checked, v, if (in_room(v) && !set_has(&S.acked, v)) all = false;)
+    return all && S.checked.n > 0;
 }
 static int want_items;
 static bool have_items(void) { return S.item_count >= want_items; }
@@ -192,26 +234,51 @@ static void test_live(int argc, char **argv)
 
     /* Native ability grants become checks and give nothing. */
     give(0x001);
-    CHECK(set_has(&S.checked, ani_ap_abilities[0].location));
+    CHECK(set_has(&S.checked, loc_named("King O'Sullivans Mines: Bomb")));
     frames_until(all_acked, 5000, "the Bomb check to be acknowledged");
 
-    /* An Edgar picked up in level 1 is "Level 1 Edgar 1". */
+    /* A pickup is the check its object is: the Rodeo Edgar in Ye Old West,
+     * once it is collected and not while it waits. */
     set_level(1);
-    *edgar_var() = 0;
-    ani_ap_hook_pickup(gen_pickup_other);
-    CHECK(S.checked.n == 1);
-    ani_ap_hook_pickup(gen_pickup_edgar);
-    CHECK(set_has(&S.checked, ani_ap_levels[1].edgar_location[0]));
-    /* A script-given Edgar arrives through the frame. */
-    *(uint8_t *)((uintptr_t)g_xbox_mem_offset + ANI_G_EDGAR_PENDING) = 1;
-    ani_ap_hook_frame(gen_frame);
-    CHECK(set_has(&S.checked, ani_ap_levels[1].edgar_location[1]));
-    frames_until(all_acked, 5000, "the Edgar checks to be acknowledged");
+    {
+        uint32_t bronco = make_pickup(1, "Edgar_Bronco", 3);
+        uint32_t room125 = make_pickup(2, "edgar_125_33", 3);
+        uint32_t nugget = make_pickup(3, "goldnuggets1", 1);
+        pickup(bronco, gen_pickup_wait);
+        CHECK(S.checked.n == 1);
+        pickup(bronco, gen_pickup_collect);
+        CHECK(set_has(&S.checked, loc_named("Ye Old West: Rodeo Edgar")));
+        pickup(bronco, gen_pickup_collect);    /* stays collected: nothing new */
+        CHECK(S.checked.n == 2);
+        /* Any room's copy of the 125 Edgar is that Edgar. */
+        pickup(room125, gen_pickup_collect);
+        CHECK(set_has(&S.checked, loc_named("Ye Old West: 125 Gold Nuggets Edgar")));
+        /* A collectible, and the milestone it completes. */
+        *major_var() = 24.0f;
+        pickup(nugget, gen_pickup_collect);
+        CHECK(set_has(&S.checked, loc_named("Ye Old West: Gold Nugget 1")));
+        CHECK(set_has(&S.checked, loc_named("Ye Old West: 25 Gold Nuggets")));
+        CHECK(!set_has(&S.checked, loc_named("Ye Old West: 50 Gold Nuggets")));
+        /* Objects are named per level: Spooky Movie's second C, and a name
+         * from another level that is nothing here. */
+        set_level(2);
+        *major_var() = 0.0f;
+        pickup(make_pickup(4, "acme_c01", 5), gen_pickup_collect);
+        CHECK(set_has(&S.checked, loc_named("Spooky Movie: Letter C")));
+        pickup(make_pickup(5, "Edgar_Bronco", 3), gen_pickup_collect);
+        CHECK(S.checked.n == 6);
+    }
+    frames_until(all_acked, 5000, "the checks to be acknowledged");
+
+    /* The room has every collectible as a check and so no milestones: the
+     * milestone is kept but not sent. */
+    CHECK(!in_room(loc_named("Ye Old West: 25 Gold Nuggets")));
+    CHECK(in_room(loc_named("Ye Old West: Gold Nugget 1")));
 
     /* The world puts some item behind each check; with one player all of
      * them are ours. Start inventory (Wakko, Dot) arrives too. */
-    want_items = 3 + 2;
-    frames_until(have_items, 5000, "items for the three checks");
+    want_items = 5 + 2;
+    frames_until(have_items, 5000, "items for the five checks sent");
     edgar_items = S.edgars;
     CHECK(get_all_edgars() == (float)edgar_items);
     /* The abilities the session owns follow what was received; Wakko and
@@ -231,11 +298,10 @@ static void test_live(int argc, char **argv)
 static void test_offline(int argc, char **argv)
 {
     boot(argc, argv);   /* the server is down: the last seed is used */
-    CHECK(S.item_count >= 5 && S.checked.n == 3);
+    CHECK(S.item_count >= 7 && S.checked.n == 6);
     set_level(2);
-    *edgar_var() = 0;
-    ani_ap_hook_pickup(gen_pickup_edgar);
-    CHECK(set_has(&S.checked, ani_ap_levels[2].edgar_location[0]));
+    pickup(make_pickup(0, "Edgar_Boss", 3), gen_pickup_collect);
+    CHECK(set_has(&S.checked, loc_named("Spooky Movie: Bride Boss Edgar")));
     CHECK(!all_acked());
     puts("offline ok");
 }
@@ -243,7 +309,7 @@ static void test_offline(int argc, char **argv)
 static void test_resume(int argc, char **argv)
 {
     boot(argc, argv);
-    CHECK(S.checked.n == 4 && !all_acked());
+    CHECK(S.checked.n == 7 && !all_acked());
     frames_until(connected, 10000, "Connected");
     frames_until(all_acked, 5000, "the offline check to be acknowledged");
     puts("resume ok");

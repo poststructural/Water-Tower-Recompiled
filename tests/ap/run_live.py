@@ -25,6 +25,7 @@ YAML = """name: Tester
 game: "Animaniacs: The Great Edgar Hunt"
 "Animaniacs: The Great Edgar Hunt":
   edgars_required: 10
+  collectibles: every_one
   shuffle_abilities: true
   starting_siblings: start_with
 """
@@ -93,7 +94,10 @@ def main() -> int:
         raise RuntimeError("server did not start")
 
     def stop_server(p):
-        p.send_signal(signal.SIGINT)   # MultiServer saves its .apsave on exit
+        if os.name == "nt":
+            p.terminate()              # no SIGINT for a child on Windows
+        else:
+            p.send_signal(signal.SIGINT)   # MultiServer saves its .apsave on exit
         try:
             p.wait(20)
         except subprocess.TimeoutExpired:

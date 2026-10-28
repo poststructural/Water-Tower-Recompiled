@@ -31,13 +31,40 @@ uint16_t ani_game_abilities(void) { return G16(ANI_G_ABILITIES); }
 void ani_game_set_abilities(uint16_t bits) { G16(ANI_G_ABILITIES) = bits; }
 bool ani_game_edgar_pending(void) { return G8(ANI_G_EDGAR_PENDING) != 0; }
 
-bool ani_game_edgar_counter(float *out)
+uint32_t ani_game_pickup_state(uint32_t obj)
 {
-    uint32_t p = G32(ANI_G_EDGAR_COUNTER);
-    if (!guest_ptr_ok(p)) return false;
-    *out = GF(p);
-    return true;
+    return guest_ptr_ok(obj) ? G32(obj + ANI_G_PICKUP_STATE) : 0xFFFFu;
 }
+
+uint32_t ani_game_pickup_type(uint32_t obj)
+{
+    return guest_ptr_ok(obj) ? G32(obj + ANI_G_PICKUP_TYPE) : 0;
+}
+
+bool ani_game_object_name(uint32_t obj, char *out, size_t n)
+{
+    uint32_t s;
+    size_t i;
+    if (!guest_ptr_ok(obj) || !n) return false;
+    s = G32(obj + ANI_G_OBJ_NAME);
+    if (!guest_ptr_ok(s)) return false;
+    for (i = 0; i + 1 < n && G8(s + i); i++) out[i] = (char)G8(s + i);
+    out[i] = 0;
+    return i > 0;
+}
+
+static int lower(int c) { return c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : c; }
+
+int ani_strnicmp(const char *a, const char *b, size_t n)
+{
+    for (; n; n--, a++, b++) {
+        int d = lower((unsigned char)*a) - lower((unsigned char)*b);
+        if (d || !*a) return d;
+    }
+    return 0;
+}
+
+int ani_stricmp(const char *a, const char *b) { return ani_strnicmp(a, b, (size_t)-1); }
 
 /* 0x0009C7A0 for a plain name (no "object." prefix): the store's table at
  * +0x1C holds a count at +4 and 0x18-byte entries at +8 (name pointer, then

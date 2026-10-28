@@ -29,3 +29,4 @@ void ani_ap_hook_frame(ani_gen_fn gen);          /* 0x0009A9C0 game update */
 void ani_ap_hook_pickup(ani_gen_fn gen);         /* 0x00027E00 pickup update */
 void ani_ap_hook_give_ability(ani_gen_fn gen);   /* 0x0009F840 GiveAbility */
 void ani_ap_hook_get_all_edgars(ani_gen_fn gen); /* 0x000FD450 GetAllEdgars */
+void ani_ap_hook_credits(ani_gen_fn gen);        /* 0x000FC730 SetReadyForCredits */

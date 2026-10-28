@@ -30,13 +30,17 @@ extern ptrdiff_t g_xbox_mem_offset;
 #define G32(va) (*(volatile uint32_t *)((uintptr_t)g_xbox_mem_offset + (uint32_t)(va)))
 #define GF(va)  (*(volatile float    *)((uintptr_t)g_xbox_mem_offset + (uint32_t)(va)))
 
-#define SIDECAR_VERSION 1
+#define SIDECAR_VERSION 2
 #define MAX_ITEMS 4096
-#define MAX_LOCS 256
+/* Every location ID is ANI_AP_BASE_ID plus less than this. */
+#define LOC_SPAN (16u << 16)
 
 /* ── State ─────────────────────────────────────────────────── */
 
-typedef struct { int64_t v[MAX_LOCS]; int n; } LocSet;
+/* A set of this game's locations, as a bitmap over the ID span. */
+typedef struct { uint8_t bits[LOC_SPAN / 8]; int n; } LocSet;
+
+enum { GOAL_EDGARS = 0, GOAL_CREDITS = 1 };
 
 static struct {
     bool enabled;          /* --ap-server/--ap-slot given */
@@ -54,6 +58,9 @@ static struct {
     uint16_t shuffled_mask;    /* native grants of these become checks */
     uint16_t forced_mask;      /* ...and these follow the received items */
     int edgars_required;
+    int goal;                  /* GOAL_* */
+    uint32_t kinds;            /* bit per ANI_AP_KIND_* in this room */
+    bool credits_reached;
     bool have_slot_data;
     /* session */
     uint64_t generation;   /* of the connection that sent Connected; 0 if none */
@@ -69,17 +76,37 @@ static struct {
 #define LOG(...) do { printf("[AP] " __VA_ARGS__); putchar('\n'); fflush(stdout); } while (0)
 #define DBG(...) do { if (S.log) LOG(__VA_ARGS__); } while (0)
 
+static bool loc_ok(int64_t v) { return v >= ANI_AP_BASE_ID && v < ANI_AP_BASE_ID + LOC_SPAN; }
+
 static bool set_has(const LocSet *s, int64_t v)
 {
-    for (int i = 0; i < s->n; i++) if (s->v[i] == v) return true;
-    return false;
+    uint32_t o = (uint32_t)(v - ANI_AP_BASE_ID);
+    return loc_ok(v) && (s->bits[o >> 3] >> (o & 7) & 1);
 }
 
 static bool set_add(LocSet *s, int64_t v)
 {
-    if (set_has(s, v) || s->n >= MAX_LOCS) return false;
-    s->v[s->n++] = v;
+    uint32_t o = (uint32_t)(v - ANI_AP_BASE_ID);
+    if (!loc_ok(v) || set_has(s, v)) return false;
+    s->bits[o >> 3] |= (uint8_t)(1u << (o & 7));
+    s->n++;
     return true;
+}
+
+static void set_clear(LocSet *s) { memset(s, 0, sizeof *s); }
+
+/* Runs body with v bound to each member, in ID order. */
+#define SET_EACH(s, v, body) \
+    for (uint32_t o_ = 0; o_ < LOC_SPAN; o_ += 8) { \
+        uint8_t b_ = (s)->bits[o_ >> 3]; \
+        for (int k_ = 0; b_ && k_ < 8; k_++, b_ >>= 1) \
+            if (b_ & 1) { int64_t v = ANI_AP_BASE_ID + o_ + k_; body } }
+
+/* Checks of the kinds this room has; the rest are kept but never sent. */
+static bool in_room(int64_t v)
+{
+    int kind = ANI_AP_KIND_OF(v);
+    return kind >= 0 && kind < 32 && (S.kinds >> kind & 1);
 }
 
 static const AniApAbility *ability_by_item(int64_t item)
@@ -100,18 +127,13 @@ static const char *item_name(int64_t item)
 
 static const char *location_name(int64_t loc)
 {
-    static char buf[96];
-    for (int l = 0; l < ANI_AP_LEVELS; l++)
-        for (int n = 0; n < ani_ap_levels[l].edgars; n++)
-            if (ani_ap_levels[l].edgar_location[n] == loc) {
-                snprintf(buf, sizeof buf, "%s Edgar %d", ani_ap_levels[l].name, n + 1);
-                return buf;
-            }
-    for (int i = 0; i < ANI_AP_ABILITIES; i++)
-        if (ani_ap_abilities[i].location == loc) {
-            snprintf(buf, sizeof buf, "%s Pickup", ani_ap_abilities[i].name);
-            return buf;
-        }
+    int lo = 0, hi = ANI_AP_NAMES - 1;
+    while (lo <= hi) {
+        int mid = (lo + hi) / 2;
+        if (ani_ap_location_names[mid].id == loc) return ani_ap_location_names[mid].name;
+        if (ani_ap_location_names[mid].id < loc) lo = mid + 1;
+        else hi = mid - 1;
+    }
     return NULL;
 }
 
@@ -130,8 +152,9 @@ static void recount(void)
 
 static void write_set(AjBuf *b, const char *key, const LocSet *s)
 {
+    int n = 0;
     ajb_fmt(b, ",\"%s\":[", key);
-    for (int i = 0; i < s->n; i++) ajb_fmt(b, "%s%lld", i ? "," : "", (long long)s->v[i]);
+    SET_EACH(s, v, ajb_fmt(b, "%s%lld", n++ ? "," : "", (long long)v);)
     ajb_raw(b, "]");
 }
 
@@ -182,8 +205,9 @@ static void save_sidecar(void)
     ajb_raw(&b, ",\"slot\":");
     ajb_str(&b, S.slot);
     ajb_fmt(&b, ",\"have_slot_data\":%s,\"shuffled_mask\":%u,\"forced_mask\":%u,"
-            "\"edgars_required\":%d", S.have_slot_data ? "true" : "false",
-            S.shuffled_mask, S.forced_mask, S.edgars_required);
+            "\"edgars_required\":%d,\"goal\":%d,\"kinds\":%u,\"credits_reached\":%s",
+            S.have_slot_data ? "true" : "false", S.shuffled_mask, S.forced_mask,
+            S.edgars_required, S.goal, S.kinds, S.credits_reached ? "true" : "false");
     ajb_raw(&b, ",\"items\":[");
     for (int i = 0; i < S.item_count; i++)
         ajb_fmt(&b, "%s%lld", i ? "," : "", (long long)S.items[i]);
@@ -202,7 +226,7 @@ static void save_sidecar(void)
 
 static void read_set(const AjValue *arr, LocSet *s)
 {
-    s->n = 0;
+    set_clear(s);
     for (const AjValue *c = arr ? arr->child : NULL; c; c = c->next)
         set_add(s, aj_int(c, 0));
 }
@@ -225,6 +249,9 @@ static bool load_sidecar(void)
         S.shuffled_mask = (uint16_t)aj_int(aj_get(v, "shuffled_mask"), 0);
         S.forced_mask = (uint16_t)aj_int(aj_get(v, "forced_mask"), 0);
         S.edgars_required = (int)aj_int(aj_get(v, "edgars_required"), 0);
+        S.goal = (int)aj_int(aj_get(v, "goal"), GOAL_EDGARS);
+        S.kinds = (uint32_t)aj_int(aj_get(v, "kinds"), 0);
+        S.credits_reached = aj_bool(aj_get(v, "credits_reached"), false);
         recount();
     } else if (t) {
         LOG("%s is unreadable or for another seed; starting it afresh", S.sidecar);
@@ -246,9 +273,9 @@ static void send_pending(void)
     AjBuf b = {0};
     int n = 0;
     ajb_raw(&b, "[{\"cmd\":\"LocationChecks\",\"locations\":[");
-    for (int i = 0; i < S.checked.n; i++)
-        if (!set_has(&S.acked, S.checked.v[i]))
-            ajb_fmt(&b, "%s%lld", n++ ? "," : "", (long long)S.checked.v[i]);
+    SET_EACH(&S.checked, v,
+        if (in_room(v) && !set_has(&S.acked, v))
+            ajb_fmt(&b, "%s%lld", n++ ? "," : "", (long long)v);)
     ajb_raw(&b, "]}]");
     if (n && !b.oom) send_cmd(b.buf);
     ajb_free(&b);
@@ -258,15 +285,25 @@ static void check_goal(void)
 {
     if (S.goal_sent || !S.generation || !S.have_slot_data || S.edgars < S.edgars_required)
         return;
+    if (S.goal == GOAL_CREDITS && !S.credits_reached)
+        return;
     send_cmd("[{\"cmd\":\"StatusUpdate\",\"status\":30}]");
     S.goal_sent = true;
-    LOG("goal: %d Edgars received", S.edgars);
+    if (S.goal == GOAL_CREDITS)
+        LOG("goal: the credits, with %d Edgars received", S.edgars);
+    else
+        LOG("goal: %d Edgars received", S.edgars);
 }
 
-static void observe(int64_t location, const char *what)
+static void observe(int64_t location)
 {
+    const char *name;
     if (!set_add(&S.checked, location)) return;
-    LOG("check: %s", what);
+    name = location_name(location);
+    if (S.have_slot_data && !in_room(location))
+        DBG("found %s (not a check in this room)", name ? name : "?");
+    else
+        LOG("check: %s", name ? name : "?");
     save_sidecar();
     send_pending();
 }
@@ -330,7 +367,14 @@ static void on_connected(const AjValue *p, uint64_t generation)
             snprintf(S.players[slot], sizeof S.players[slot], "%s",
                      aj_str(aj_get(c, "alias"), aj_str(aj_get(c, "name"), "")));
     }
-    S.edgars_required = (int)aj_int(aj_get(sd, "edgars_required"), 36);
+    S.edgars_required = (int)aj_int(aj_get(sd, "edgars_required"), 30);
+    S.goal = (int)aj_int(aj_get(sd, "goal"), GOAL_EDGARS);
+    S.kinds = 0;
+    for (const AjValue *c = aj_get(sd, "location_kinds") ? aj_get(sd, "location_kinds")->child : NULL;
+         c; c = c->next) {
+        int64_t k = aj_int(c, -1);
+        if (k >= 0 && k < 32) S.kinds |= 1u << k;
+    }
     S.shuffled_mask = bits_of(aj_get(sd, "shuffled_abilities"));
     S.forced_mask = (uint16_t)(S.shuffled_mask | bits_of(aj_get(sd, "start_abilities")));
     S.have_slot_data = true;
@@ -338,8 +382,9 @@ static void on_connected(const AjValue *p, uint64_t generation)
      * save may have forgotten checks, which then count as pending again. */
     read_set(checked, &S.acked);
     save_sidecar();
-    LOG("connected as %s (slot %lld); %d Edgars to win, shuffled abilities 0x%03X",
-        S.slot, (long long)aj_int(aj_get(p, "slot"), 0), S.edgars_required, S.shuffled_mask);
+    LOG("connected as %s (slot %lld); goal %s with %d Edgars, shuffled abilities 0x%03X",
+        S.slot, (long long)aj_int(aj_get(p, "slot"), 0),
+        S.goal == GOAL_CREDITS ? "the credits" : "receiving", S.edgars_required, S.shuffled_mask);
     send_pending();
     check_goal();
 }
@@ -573,20 +618,32 @@ bool ani_ap_active(void) { return S.bound; }
  * the caller pushed. A hook that answers in place of the body must pop it
  * itself, or the caller resumes with esp 4 bytes low. */
 
-static void edgar_found(int level, float count, const char *how)
+/* The check a pickup object is: its level and objectname, as the catalog
+ * lists them (or a prefix, for the per-room copies of an Edgar). */
+static int64_t pickup_location(int level, const char *name)
 {
-    int ordinal = (int)(count + 0.5f);
-    char what[96];
-    DBG("edgar: level %d count %.1f (%s), record %d", level, count, how,
-        level >= 0 ? ani_game_record_edgars(level) : -1);
-    if (level < 0 || level >= ANI_AP_LEVELS) return;
-    if (ordinal < 1 || ordinal > ani_ap_levels[level].edgars) {
-        LOG("Edgar number %d in %s is beyond the catalog's %d; please report this",
-            ordinal, ani_ap_levels[level].name, ani_ap_levels[level].edgars);
-        return;
+    for (int i = 0; i < ANI_AP_OBJECTS; i++)
+        if (ani_ap_objects[i].level == level && !ani_stricmp(ani_ap_objects[i].object, name))
+            return ani_ap_objects[i].location;
+    for (int i = 0; i < ANI_AP_PREFIXES; i++) {
+        const char *p = ani_ap_prefixes[i].prefix;
+        if (ani_ap_prefixes[i].level == level && !ani_strnicmp(p, name, strlen(p)))
+            return ani_ap_prefixes[i].location;
     }
-    snprintf(what, sizeof what, "%s Edgar %d", ani_ap_levels[level].name, ordinal);
-    observe(ani_ap_levels[level].edgar_location[ordinal - 1], what);
+    return 0;
+}
+
+/* Collectible milestones: the level's MajorPickupsCollected against each
+ * step (25, 50, ... 300). */
+static void check_milestones(void)
+{
+    int level = ani_game_level();
+    float v;
+    if (level < 0 || level >= ANI_AP_LEVELS || !ani_game_script_var("MajorPickupsCollected", &v))
+        return;
+    for (int k = 0; k < ani_ap_levels[level].milestones; k++)
+        if (v + 0.5f >= (float)((k + 1) * ani_ap_levels[level].milestone_step))
+            observe(ani_ap_levels[level].milestone[k]);
 }
 
 void ani_ap_main_loop(void)
@@ -605,28 +662,42 @@ void ani_ap_main_loop(void)
 
 void ani_ap_hook_frame(ani_gen_fn gen)
 {
+    static unsigned frames;
     bool script_edgar;
     if (!S.bound) { gen(); return; }
     script_edgar = ani_game_edgar_pending();
     gen();
-    if (script_edgar) {
-        float v;
-        if (ani_game_script_var("OscarPickupsCollected", &v))
-            edgar_found(ani_game_level(), v, "script");
-        else
-            DBG("script Edgar, but OscarPickupsCollected is not readable");
-    }
+    /* A script can hand an Edgar over without a pickup object (0x0009A9EE);
+     * none of the levels' scripts are known to, so it is only logged. */
+    if (script_edgar)
+        LOG("an Edgar was handed out by a script in level %d; please report this",
+            ani_game_level());
+    /* Collectibles from before the session (or a save) count too. */
+    if (++frames % 60 == 0) check_milestones();
 }
 
 void ani_ap_hook_pickup(ani_gen_fn gen)
 {
-    float before = 0, after = 0;
-    bool had;
+    uint32_t obj, before, after;
     if (!S.bound) { gen(); return; }
-    had = ani_game_edgar_counter(&before);
+    obj = G32(g_esp + 4);           /* cdecl: the pickup object */
+    before = ani_game_pickup_state(obj);
     gen();
-    if (had && ani_game_edgar_counter(&after) && after > before)
-        edgar_found(ani_game_level(), after, "pickup");
+    after = ani_game_pickup_state(obj);
+    /* Collected: the pickup reaches state 3 (a counted pickup, after its
+     * counter goes up) or 4 (gone; 0x00027C80), which is also what a save
+     * keeps (0x0009F370). 0xFFFF is a pickup not yet set up. */
+    if (after != before && (after == 3 || after == 4) && before != 0xFFFFu) {
+        int level = ani_game_level();
+        char name[64];
+        int64_t loc;
+        if (level < 0 || !ani_game_object_name(obj, name, sizeof name)) return;
+        loc = pickup_location(level, name);
+        DBG("pickup %s (type %u) in level %d: %s", name, ani_game_pickup_type(obj), level,
+            loc ? location_name(loc) : "not a check");
+        if (loc) observe(loc);
+        if (ani_game_pickup_type(obj) == 1) check_milestones();
+    }
 }
 
 void ani_ap_hook_give_ability(ani_gen_fn gen)
@@ -636,13 +707,9 @@ void ani_ap_hook_give_ability(ani_gen_fn gen)
 
     DBG("GiveAbility 0x%03X in level %d", bits, ani_game_level());
     if (!S.bound || !(taken = bits & S.shuffled_mask)) { gen(); return; }
-    for (int i = 0; i < ANI_AP_ABILITIES; i++) {
-        if (taken & ani_ap_abilities[i].bit) {
-            char what[96];
-            snprintf(what, sizeof what, "%s Pickup", ani_ap_abilities[i].name);
-            observe(ani_ap_abilities[i].location, what);
-        }
-    }
+    for (int i = 0; i < ANI_AP_ABILITIES; i++)
+        if (taken & ani_ap_abilities[i].bit)
+            observe(ani_ap_abilities[i].location);
     /* Abilities that stay vanilla still go through the game's own code. */
     if (bits & ~taken) {
         uint32_t saved = G32(arg);
@@ -666,4 +733,16 @@ void ani_ap_hook_get_all_edgars(ani_gen_fn gen)
     GF(out) = (float)S.edgars;
     g_eax = (g_eax & 0xFFFFFF00u) | 1;
     g_esp += 4;       /* the generated body's ret: pop the return address */
+}
+
+/* SetReadyForCredits (0x000FC730), the script verb the ending calls. */
+void ani_ap_hook_credits(ani_gen_fn gen)
+{
+    if (S.bound && !S.credits_reached) {
+        S.credits_reached = true;
+        LOG("reached the credits");
+        save_sidecar();
+        check_goal();
+    }
+    gen();
 }

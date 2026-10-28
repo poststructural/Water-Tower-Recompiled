@@ -539,7 +539,8 @@ extern void sub_0009A9C0_gen(void);
 void sub_0009A9C0(void) { ANI_AP_HOOK(ani_ap_hook_frame, sub_0009A9C0_gen); }
 
 /* Pickup update (0x00027E00, called through the object type table at
- * 0x001E363C): an Edgar pickup increments the counter at *0x002ED388. */
+ * 0x001E363C), once a frame for each pickup object: the client sees which
+ * one was collected. */
 extern void sub_00027E00_gen(void);
 void sub_00027E00(void) { ANI_AP_HOOK(ani_ap_hook_pickup, sub_00027E00_gen); }
 
@@ -551,12 +552,17 @@ void sub_0009F840(void) { ANI_AP_HOOK(ani_ap_hook_give_ability, sub_0009F840_gen
 extern void sub_000FD450_gen(void);
 void sub_000FD450(void) { ANI_AP_HOOK(ani_ap_hook_get_all_edgars, sub_000FD450_gen); }
 
+/* The SetReadyForCredits script binding (0x000FC730): the ending. */
+extern void sub_000FC730_gen(void);
+void sub_000FC730(void) { ANI_AP_HOOK(ani_ap_hook_credits, sub_000FC730_gen); }
+
 recomp_func_t recomp_lookup_manual(uint32_t xbox_va)
 {
     /* The dispatch table maps a wrapped function to its generated body, so
      * the hooks reached through function pointers are returned here. */
     if (xbox_va == 0x00027E00u) return sub_00027E00;
     if (xbox_va == 0x000FD450u) return sub_000FD450;
+    if (xbox_va == 0x000FC730u) return sub_000FC730;
     /*
      * TODO: Add your overrides here. Examples:
      *
