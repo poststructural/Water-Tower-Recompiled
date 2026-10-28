@@ -566,8 +566,14 @@ static void on_print(const AjValue *p)
         const AjValue *it = aj_get(p, "item");
         bool about_us = aj_int(aj_get(p, "receiving"), 0) == S.our_slot ||
                         aj_int(aj_get(it, "player"), 0) == S.our_slot;
-        if (!strcmp(kind, "Hint") && about_us && !aj_bool(aj_get(p, "found"), false))
-            toast(ANI_UI_HINT, false, b.buf);
+        if (!strcmp(kind, "Hint") && about_us && !aj_bool(aj_get(p, "found"), false)) {
+            /* The popup's tag says it's a hint: drop "[Hint]: " and the
+             * trailing "(unspecified)" priority. */
+            char *t = b.buf, *paren;
+            if (!strncmp(t, "[Hint]: ", 8)) t += 8;
+            if ((paren = strrchr(t, '(')) && paren > t && paren[-1] == ' ') paren[-1] = 0;
+            toast(ANI_UI_HINT, false, t);
+        }
         else if (!strcmp(kind, "Chat") || !strcmp(kind, "ServerChat") || !strcmp(kind, "Countdown"))
             toast(ANI_UI_CHAT, false, b.buf);
     }

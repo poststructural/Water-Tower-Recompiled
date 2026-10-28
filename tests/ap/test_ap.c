@@ -481,9 +481,9 @@ static void test_names(const char *dir)
          "\"item\":{\"item\":10,\"location\":1095630848,\"player\":1,\"flags\":1},"
          "\"data\":[{\"text\":\"[Hint]: \"},{\"type\":\"player_id\",\"text\":\"2\"},"
          "{\"text\":\"'s \"},{\"type\":\"item_id\",\"text\":\"10\",\"player\":2},"
-         "{\"text\":\" is at somewhere\"}]}]");
+         "{\"text\":\" is at somewhere\"},{\"text\":\" (unspecified)\"}]}]");
     CHECK(ani_ui_toasts(t, 8, ani_ui_now_ms()) == 1 && t[0].kind == ANI_UI_HINT &&
-          !strcmp(t[0].text, "[Hint]: Sam's Hookshot is at somewhere"));
+          !strcmp(t[0].text, "Sam's Hookshot is at somewhere"));
     ani_ui_clear();
     feed("[{\"cmd\":\"PrintJSON\",\"type\":\"Hint\",\"receiving\":2,\"found\":true,"
          "\"item\":{\"item\":10,\"location\":1,\"player\":1,\"flags\":1},\"data\":[{\"text\":\"x\"}]}]");
