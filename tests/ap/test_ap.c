@@ -11,6 +11,7 @@
  * It includes ap_bridge.c to see the bridge's state.
  */
 #include "../../src/ap/ap_bridge.c"
+#include "../../src/ap/ap_ui.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -329,11 +330,65 @@ static void test_resume(int argc, char **argv)
     puts("resume ok");
 }
 
+/* ── Overlay model ─────────────────────────────────────────── */
+
+static bool found_one(int64_t loc, void *ctx) { return loc == *(int64_t *)ctx; }
+
+static void test_ui(void)
+{
+    AniUiToast t[8];
+    char buf[32];
+    ani_ui_clear();
+    /* A popup lasts ANI_UI_TOAST_MS and fades over its last ANI_UI_FADE_MS. */
+    ani_ui_notify(ANI_UI_RECEIVED, true, "Edgar from Sam", 1000);
+    CHECK(ani_ui_toasts(t, 8, 1000) == 1 && !strcmp(t[0].text, "Edgar from Sam"));
+    CHECK(t[0].kind == ANI_UI_RECEIVED && t[0].progression && t[0].fade == 1.0f);
+    CHECK(ani_ui_toasts(t, 8, 1000 + 3750) == 1 && t[0].fade > 0.4f && t[0].fade < 0.6f);
+    CHECK(ani_ui_toasts(t, 8, 1000 + 3999) == 1);
+    CHECK(ani_ui_toasts(t, 8, 1000 + 4000) == 0);
+
+    /* Newest first, ANI_UI_SHOWN at most, the last line counts the rest. */
+    ani_ui_clear();
+    for (int i = 0; i < 6; i++) {
+        snprintf(buf, sizeof buf, "item %d", i);
+        ani_ui_notify(ANI_UI_SENT, false, buf, 100 + i);
+    }
+    CHECK(ani_ui_toasts(t, 8, 200) == ANI_UI_SHOWN);
+    CHECK(!strcmp(t[0].text, "item 5") && !strcmp(t[2].text, "item 3"));
+    CHECK(!strcmp(t[3].text, "+3 more") && t[3].kind == ANI_UI_INFO);
+    /* A burst goes away together: the hidden ones are summed up, not queued. */
+    CHECK(ani_ui_toasts(t, 8, 100 + 4005) == 0);
+
+    /* A release of 50 items: bounded, and the count says so. */
+    ani_ui_clear();
+    for (int i = 0; i < 50; i++) ani_ui_notify(ANI_UI_RECEIVED, false, "Applause", 10);
+    CHECK(ani_ui_toasts(t, 8, 10) == ANI_UI_SHOWN);
+    CHECK(!strncmp(t[3].text, "+", 1) && atoi(t[3].text + 1) == 47);
+
+    /* Status round trip. */
+    AniUiStatus st = {0}, back;
+    st.edgars = 12; st.required = 30; st.conn = ANI_UI_CONNECTED; st.active = true;
+    st.cell[1][ANI_AP_KIND_EDGAR].found = 3;
+    ani_ui_set_status(&st);
+    ani_ui_get_status(&back);
+    CHECK(!memcmp(&st, &back, sizeof st));
+
+    /* Ye Old West has 8 Edgars; with one found, 7 names are left. */
+    const char *names[64];
+    int64_t rodeo = loc_named("Ye Old West: Rodeo Edgar");
+    int n = ani_ui_missing(1, 1u << ANI_AP_KIND_EDGAR, found_one, &rodeo, names, 64);
+    CHECK(n == 7);
+    for (int i = 0; i < n; i++) CHECK(strcmp(names[i], "Ye Old West: Rodeo Edgar"));
+    CHECK(ani_ui_missing(1, 1u << ANI_AP_KIND_EDGAR, found_one, &rodeo, names, 3) == 3);
+    puts("ui ok");
+}
+
 int main(int argc, char **argv)
 {
     setvbuf(stdout, NULL, _IONBF, 0);
     if (argc >= 2 && !strcmp(argv[1], "json")) test_json();
     else if (argc >= 2 && !strcmp(argv[1], "game")) test_game();
+    else if (argc >= 2 && !strcmp(argv[1], "ui")) test_ui();
     else if (argc >= 5 && !strcmp(argv[1], "live")) test_live(argc, argv);
     else if (argc >= 5 && !strcmp(argv[1], "offline")) test_offline(argc, argv);
     else if (argc >= 5 && !strcmp(argv[1], "resume")) test_resume(argc, argv);
