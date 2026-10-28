@@ -450,7 +450,7 @@ static void draw_detail(uint32_t *px, int w, int h, const AniUiStatus *st, int t
     uint32_t kinds = st->kinds & ~(1u << ANI_AP_KIND_COLLECTIBLE);
     char t[160];
     int n = ani_ui_missing(s_detail, kinds, found_fn, NULL, names, ANI_AP_NAMES);
-    int x0 = w / 12, y0 = h / 5, rowh = ts * 3 / 2;
+    int x0 = w / 12, rowh = ts * 3 / 2, y0 = h / 5 + rowh / 2;
     int per_col = (h - y0 - ts * 4) / rowh, ncol = 2;
     if (per_col < 1) per_col = 1;
     int page = per_col * ncol;

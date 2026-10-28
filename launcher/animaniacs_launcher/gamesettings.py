@@ -58,6 +58,13 @@ texture_filter = smooth
 [game]
 ; on skips the publisher logos and intro movie at start-up
 skip_intro = off
+
+[archipelago]
+; During an Archipelago session: popups for items sent and received,
+; the tracker screen (Tab, F1, or hold Back), and the Edgar counter
+notifications = on
+tracker = on
+hud = on
 """
 
 
@@ -83,6 +90,9 @@ OPTIONS = {o.section + "." + o.key: o for o in [
     Option("graphics", "msaa", "1", "Anti-aliasing"),
     Option("graphics", "texture_filter", "smooth", "Texture filtering"),
     Option("game", "skip_intro", "off", "Skip intro logos and movie"),
+    Option("archipelago", "notifications", "on", "Item popups"),
+    Option("archipelago", "tracker", "on", "Tracker screen"),
+    Option("archipelago", "hud", "on", "Edgar counter"),
 ]}
 
 # Keys from the first settings.ini. The game still reads them, and whichever
@@ -111,7 +121,8 @@ RENDER_SCALES = [("auto", "Auto (matches the output resolution)")] + [
 MAX_SCALES = [(str(n), f"{n}x  ({640 * n} x {480 * n})") for n in range(1, 9)]
 MSAA = [("1", "Off"), ("2", "2x MSAA"), ("4", "4x MSAA"), ("8", "8x MSAA")]
 TEXTURE_FILTERS = [("smooth", "Smooth (filtered)"), ("console", "Console (as on Xbox)")]
-SWITCHES = ("display.show_fps", "game.skip_intro")
+SWITCHES = ("display.show_fps", "game.skip_intro", "archipelago.notifications",
+            "archipelago.tracker", "archipelago.hud")
 
 
 def is_on(v: str) -> bool:

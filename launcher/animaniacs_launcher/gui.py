@@ -466,6 +466,18 @@ class App:
                    command=lambda: webbrowser.open("https://archipelago.gg")).pack(side="left")
         self.ap_status = ttk.Label(f, style="PanelMuted.TLabel", wraplength=760, justify="left")
         self.ap_status.grid(sticky="w", columnspan=3, pady=(14, 0))
+        # In game (settings.ini [archipelago]); saved with the other settings.
+        self.ap_switches = {}
+        for name, label, text in (
+                ("archipelago.notifications", "In game", "Popups for items sent and received"),
+                ("archipelago.tracker", "", "Tracker screen (Tab, F1, or hold Back)"),
+                ("archipelago.hud", "", "Edgar counter")):
+            var = tk.BooleanVar(value=True)
+            self.ap_switches[name] = var
+            self._row(f, label, ttk.Checkbutton(
+                f, text=text, variable=var,
+                command=lambda n=name, v=var: self._set(n, "on" if v.get() else "off")))
+        self._save_row(f)
         return f
 
     def _ap_changed(self) -> None:
@@ -722,6 +734,8 @@ class App:
         self.msaa.set(self._v("graphics.msaa"))
         self.filt.set(self._v("graphics.texture_filter"))
         self.skip.set(self._v("game.skip_intro") == "on")
+        for name, var in self.ap_switches.items():
+            var.set(self._v(name) == "on")
         self.loading = False
         self._mode_shown()
         self._scale_hint()
@@ -832,7 +846,7 @@ class App:
         return True
 
     def reset_page(self) -> None:
-        page = {1: "display.", 2: "graphics.", 3: "game."}.get(self.tab, "")
+        page = {1: "display.", 2: "graphics.", 3: "game.", 6: "archipelago."}.get(self.tab, "")
         for name, o in gamesettings.OPTIONS.items():
             if name.startswith(page):
                 self._set(name, o.default)

@@ -40,6 +40,25 @@ tried. What still needs a playthrough is listed under Logic.
 The log (stdout, or the launcher's game log) shows what is sent and received:
 `[AP] check: Ye Old West: Rodeo Edgar`, `[AP] received Edgar`.
 
+### In game
+
+- **Popups**, top right: `GOT` (gold) for an item you receive, with who sent it
+  ("Hookshot from Sam", or where you found your own: "Edgar (Rodeo Edgar)"), and
+  `SENT` (blue) for an item one of your checks sends someone else ("Bow for Sam").
+  Progression items are in color. Each lasts four seconds; when more come at once
+  than fit, the last line counts the rest. Items that arrived while the game was
+  closed are one popup: "Received 14 items". Other games' names come from the room's
+  data packages, cached in `<save dir>/archipelago/datapackage/`.
+- **Edgar counter**, bottom left: Edgars received and the number the goal wants, with
+  a light: green connected, amber reconnecting, red offline.
+- **Tracker**: Tab or F1, or hold Back on the controller for half a second. The game
+  holds still while it is open. One row per movie set with found/total for each kind of
+  check the room has; Enter (or A) lists the checks still left in a set, Left (or B)
+  goes back, Tab or B closes.
+
+Each can be turned off in the launcher's Archipelago tab or in settings.ini
+(`[archipelago]`, [SETTINGS.md](SETTINGS.md)).
+
 ### Options
 
 | Option | Default | |
@@ -116,6 +135,10 @@ list per location.
 | `ap_json.c` | Small JSON parser and builder |
 | `ap_bridge.c` | Everything on the game thread: protocol, the sidecar, the hooks |
 | `ap_game.c` | Guest addresses and layouts |
+| `ap_names.c` | Other games' item and location names, from the room's data packages, cached on disk |
+| `ap_ui.c` | What the overlay shows (popups, counter, tracker counts), written by the bridge and read by the renderer's thread under a lock |
+| `ap_font.c` | Text: a system TrueType font (Segoe UI, Arial, DejaVu Sans...) through stb_truetype, `stb_easy_font` if none is found |
+| `ap_hud.c` | The overlay on screen: popups and counter as panels the presenter copies over each frame (`nv2a_hud_rects`, `patches/ngbrecomp-0007`), the tracker over the held game (`nv2a_overlay_frame`), keys and pad |
 
 The sidecar `ap_state.json` (next to the seed's saves) holds the received items,
 the checks found and the checks the server has acknowledged. A check is written
@@ -169,6 +192,9 @@ with `MultiServer`, and runs three cases against fake guest memory: a live sessi
 play with the server stopped (including beating CC Deville), and the resend when it
 is back.
 
-`ANI_AP_LOG=1` logs every pickup state change; `ANI_AP_TEST_COLLECT=1` (a test
+`ANI_HUD_DUMP=<dir>` writes what the overlay draws: the popup and counter panels with
+their places once a second (`hud_<ms>.txt`, `hud_<ms>_<n>.ppm`) and each tracker screen,
+to check against the game's own frames (`NV2A_CAPTURE`). `ANI_HUD_TEST=<seconds>` opens
+the tracker that long after start and steps through it. `ANI_AP_LOG=1` logs every pickup state change; `ANI_AP_TEST_COLLECT=1` (a test
 switch) brings one waiting pickup that is a check to the player every two seconds,
 so a run collects them through the game's own code without anyone playing.
