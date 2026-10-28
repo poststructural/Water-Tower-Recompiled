@@ -22,13 +22,14 @@ import webbrowser
 from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
-from . import (HOME_URL, __version__, build, config, gamefiles, gamepad, gamesettings, mods, play,
-               profiles, steam, updates)
+from . import (HOME_URL, __version__, archipelago, build, config, gamefiles, gamepad, gamesettings,
+               mods, play, profiles, steam, updates)
 from .gamesettings import (ASPECTS, HUDS, MAX_SCALES, MODES, MSAA, RENDER_SCALES, RESOLUTIONS,
                            TEXTURE_FILTERS, VSYNC)
 
 CHANNELS = {"release": "Releases", "main": "Latest main (newest commit)"}
-TABS = ["HOME", "DISPLAY", "GRAPHICS", "GAMEPLAY", "SAVES", "MODS", "UPDATES", "ABOUT"]
+TABS = ["HOME", "DISPLAY", "GRAPHICS", "GAMEPLAY", "SAVES", "MODS", "ARCHIPELAGO", "UPDATES",
+        "ABOUT"]
 UPDATES_TAB = TABS.index("UPDATES")
 
 # Warner Bros. water tower palette on a dark backdrop.
@@ -200,7 +201,8 @@ class App:
         self.body = ttk.Frame(r, style="Panel.TFrame")
         self.body.pack(fill="both", expand=True, padx=28)
         self.pages = [self._home(), self._display(), self._graphics(), self._gameplay(),
-                      self._saves(), self._mods(), self._updates(), self._about()]
+                      self._saves(), self._mods(), self._archipelago(), self._updates(),
+                      self._about()]
 
     def _page(self) -> ttk.Frame:
         f = ttk.Frame(self.body, style="Panel.TFrame", padding=(28, 22))
@@ -432,6 +434,71 @@ class App:
         self.mod_items: list[mods.Mod] = []
         return f
 
+    def _archipelago(self) -> ttk.Frame:
+        f = self._page()
+        f.columnconfigure(1, weight=1)
+        self._heading(f, "Archipelago", "Play in an Archipelago multiworld: every Edgar, ACME letter, "
+                                        "script page and quest item (and, if the room says so, the "
+                                        "collectibles and apples) is a check, and the Edgars you "
+                                        "receive open the movie sets. Each seed keeps its own saves.")
+        self.ap_on = tk.BooleanVar(value=self.st.ap_enabled)
+        self._row(f, "Session", ttk.Checkbutton(f, text="Join this room when I press Play",
+                                                variable=self.ap_on, command=self._ap_changed))
+        self.ap_server = tk.StringVar(value=self.st.ap_server)
+        self.ap_slot = tk.StringVar(value=self.st.ap_slot)
+        self.ap_password = tk.StringVar(value=self.st.ap_password)
+        for label, var, note, show in (
+                ("Server", self.ap_server, "archipelago.gg:38281, or ws://host:port", ""),
+                ("Slot name", self.ap_slot, "your name in the room", ""),
+                ("Password", self.ap_password, "if the room has one", "*")):
+            e = ttk.Entry(f, textvariable=var, width=40, show=show)
+            e.bind("<FocusOut>", lambda _e: self._ap_changed())
+            e.bind("<Return>", lambda _e: self._ap_changed())
+            self._row(f, label, e, note)
+        acts = ttk.Frame(f, style="Panel.TFrame")
+        acts.grid(sticky="w", columnspan=3, pady=(12, 0))
+        ttk.Button(acts, text="Save animaniacs.apworld…", style="Gold.TButton",
+                   command=self.save_apworld).pack(side="left")
+        ttk.Button(acts, text="Open Archipelago saves",
+                   command=lambda: _open_folder(os.path.join(config.save_dir(), "archipelago"))
+                   ).pack(side="left", padx=8)
+        ttk.Button(acts, text="Archipelago website",
+                   command=lambda: webbrowser.open("https://archipelago.gg")).pack(side="left")
+        self.ap_status = ttk.Label(f, style="PanelMuted.TLabel", wraplength=760, justify="left")
+        self.ap_status.grid(sticky="w", columnspan=3, pady=(14, 0))
+        return f
+
+    def _ap_changed(self) -> None:
+        self.st.ap_enabled = self.ap_on.get()
+        self.st.ap_server = self.ap_server.get().strip()
+        self.st.ap_slot = self.ap_slot.get().strip()
+        self.st.ap_password = self.ap_password.get()
+        self.st.save()
+        self._fill_ap()
+
+    def _fill_ap(self) -> None:
+        s = archipelago.last_session(self.st.ap_slot) if self.st.ap_slot else None
+        if s:
+            text = (f"Last session as {self.st.ap_slot}: seed {s.seed}, {s.checks} checks found, "
+                    f"{s.edgars} Edgars received" +
+                    (f" of {s.goal_edgars} needed." if s.goal_edgars else "."))
+        else:
+            text = ("Install the .apworld in Archipelago (double-click it, or put it in "
+                    "custom_worlds), make a YAML with the Options Creator, and host the room.")
+        self.ap_status.configure(text=text)
+
+    def save_apworld(self) -> None:
+        p = filedialog.asksaveasfilename(defaultextension=".apworld", initialfile="animaniacs.apworld",
+                                         filetypes=[("Archipelago world", "*.apworld")])
+        if not p:
+            return
+        try:
+            archipelago.write_apworld(p)
+        except (archipelago.ApError, OSError) as e:
+            messagebox.showerror("Archipelago", str(e))
+            return
+        messagebox.showinfo("Archipelago", f"Saved {p}")
+
     def _updates(self) -> ttk.Frame:
         f = self._page()
         f.columnconfigure(1, weight=1)
@@ -553,6 +620,8 @@ class App:
             self._fill_mods()
         if TABS[self.tab] == "UPDATES":
             self._fill_builds()
+        if TABS[self.tab] == "ARCHIPELAGO":
+            self._fill_ap()
         self.root.after_idle(self._focus_first)
 
     def _focus_first(self) -> None:
