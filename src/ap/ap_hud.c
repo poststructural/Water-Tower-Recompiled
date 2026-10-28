@@ -172,13 +172,18 @@ static int draw_toast(Panel *p, const AniUiToast *t, int pw, int ph, int ts)
     int stripe = ph / 10 > 3 ? ph / 10 : 3;
     int pad = ts / 2, tag_ts = ts * 3 / 4;
     for (int i = 0; i < pw * ph; i++) px[i] = C_PANEL;
-    ani_fill(px, pw, ph, 0, 0, stripe, ph, stripe_of(t));
+    /* Panels are opaque, so a popup fades by its text and stripe fading
+     * into the panel; then it is gone. */
+    unsigned a = (unsigned)(t->fade * 255.0f);
+#define FADED(c) (((c) & 0x00FFFFFFu) | (((c) >> 24) * a / 255u) << 24)
+    ani_fill(px, pw, ph, 0, 0, stripe, ph, FADED(stripe_of(t)));
     int x = stripe + pad;
-    x += ani_font_draw(px, pw, ph, x, (ph - tag_ts) / 2 - tag_ts / 10, tag_ts, stripe_of(t), tag_of(t));
+    x += ani_font_draw(px, pw, ph, x, (ph - tag_ts) / 2 - tag_ts / 10, tag_ts, FADED(stripe_of(t)), tag_of(t));
     x += pad;
     fit(line, sizeof line, t->text, ts, pw - x - pad);
     ani_font_draw(px, pw, ph, x, (ph - ts) / 2 - ts / 10, ts,
-                  t->progression ? stripe_of(t) : C_TEXT, line);
+                  FADED(t->progression ? stripe_of(t) : C_TEXT), line);
+#undef FADED
     return 1;
 }
 
@@ -324,9 +329,7 @@ int nv2a_hud_rects(NV2AHudRect *rects, int max, int win_w, int win_h)
             if (pw > maxw) pw = maxw;
             if (pw < ts * 8) pw = ts * 8;
             if (!draw_toast(&s_panels[i], &t[i], pw, ph, ts)) continue;
-            /* Panels are opaque: the fade slides them out to the right. */
-            int slide = (int)((1.0f - t[i].fade) * (pw + margin));
-            rects[n++] = (NV2AHudRect){ win_w - margin - pw + slide, y, pw, ph, s_panels[i].px };
+            rects[n++] = (NV2AHudRect){ win_w - margin - pw, y, pw, ph, s_panels[i].px };
             y += ph + ts / 3;
         }
     }
