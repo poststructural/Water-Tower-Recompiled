@@ -15,7 +15,7 @@ cmake_minimum_required(VERSION 3.20)
 #   TK=tools/ngbrecomp/xboxrecomp scripts/regen.sh
 # ============================================================================
 
-project(animaniacs_vk VERSION 2.1.0 LANGUAGES C CXX)
+project(animaniacs_vk VERSION 2.1.1 LANGUAGES C CXX)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
