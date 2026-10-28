@@ -159,6 +159,12 @@ def survey(resource):
             needs_collectibles=300)
         for slot in sorted(reg):
             add("edgar", n, slot, EDGAR_NAMES[n][slot], [reg[slot]], slot=slot, **dug(reg[slot]))
+        if n == 0:
+            # Beating CC Deville (the lot's boss game, EdgarsToPlayBoss Edgars
+            # to start it) hands over the last Edgar without an object, then
+            # plays the ending.
+            add("edgar", n, 8, "CC Deville Edgar", None, slot=8,
+                needs_edgars=int(attr(main, "EdgarsToPlayBoss")), final=True)
         # ACME letters (one each; Spooky Movie places its C twice).
         for t, letter in LETTERS.items():
             names = [o for o, _, pt in pickups if pt == t]
@@ -177,11 +183,18 @@ def survey(resource):
             add("quest", n, qi, f"{label} {int(num.group(1)) if num else seen[label]}"
                 if num or seen[label] > 1 else label, [o], **dug(o))
             qi += 1
-        # Collectibles, in file order, and the milestones.
-        ci = 0
+        # Collectibles, in file order (the ID), named by the number in their
+        # object name ("goldnuggets09" and "goldnuggets9" both exist: the
+        # second one met gets a "b"), and the milestones.
+        ci, named = 0, set()
         for o, cls, pt in pickups:
             if pt == T_MAJOR and cls == coll_cls:
-                add("collectible", n, ci, f"{coll} {ci + 1}", [o], **dug(o))
+                m = re.search(r"(\d+)$", o)
+                label = f"{coll} {int(m.group(1))}" if m else f"{coll} {o}"
+                if label in named:
+                    label += "b"
+                named.add(label)
+                add("collectible", n, ci, label, [o], **dug(o))
                 ci += 1
         for k in range(1, ci // MILESTONE_STEP + 1):
             add("milestone", n, k, f"{k * MILESTONE_STEP} {coll}s", None,

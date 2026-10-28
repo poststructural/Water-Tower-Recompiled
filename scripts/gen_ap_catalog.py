@@ -37,6 +37,7 @@ def render(cat: dict) -> str:
         f"#define ANI_AP_ABILITIES {len(cat['abilities'])}",
         f"#define ANI_AP_MAX_MILESTONES {max_ms}",
         f"#define ANI_AP_LOCATIONS {len(locs)}",
+        f"#define ANI_AP_CC_DEVILLE_EDGAR {next(l['id'] for l in locs if l.get('final'))}LL",
         "/* Location ID = ANI_AP_BASE_ID + kind * 0x10000 + level * 0x1000 + index. */",
     ]
     for k, v in kinds.items():

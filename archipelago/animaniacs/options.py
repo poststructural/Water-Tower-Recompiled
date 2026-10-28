@@ -5,8 +5,8 @@ from Options import Choice, PerGameCommonOptions, Range, Toggle
 
 class Goal(Choice):
     """edgar_hunt: win once you have received Edgars Required Edgars.
-    credits: win by reaching the ending (The Epic's last Edgar door needs 30
-    Edgars), with at least Edgars Required received."""
+    credits: win by beating CC Deville on the Warner lot, the game's ending (his
+    boss game needs 36 Edgars), with at least Edgars Required received."""
     display_name = "Goal"
     option_edgar_hunt = 0
     option_credits = 1
@@ -14,11 +14,11 @@ class Goal(Choice):
 
 
 class EdgarsRequired(Range):
-    """How many Edgars you need to receive to win. There are 44 in the game: eight
-    in each movie set and four on the Warner lot."""
+    """How many Edgars you need to receive to win. There are 45 in the game: eight
+    in each movie set, four on the Warner lot, and CC Deville's."""
     display_name = "Edgars Required"
     range_start = 1
-    range_end = 44
+    range_end = 45
     default = 30
 
 

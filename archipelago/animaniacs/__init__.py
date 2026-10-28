@@ -2,7 +2,7 @@
 static recompilation at https://gitlab.com/unowa001/animaniacs-remastered.
 
 The client lives inside the recompiled executable (src/ap/); there is no separate
-client program. Every pickup the game places can be a check: the 44 Edgars, the
+client program. Every pickup the game places can be a check: the 45 Edgars, the
 ACME letters, the script pages, the quest items, the collectibles and the apples.
 The Edgars you receive are what open the movie sets.
 """
@@ -125,7 +125,11 @@ class AnimaniacsWorld(World):
         # needs the ones under the dig tiles too.
         if loc.collectibles and loc.collectibles > LEVELS[loc.level].collectibles - DUG[loc.level]:
             requires.append("shovel")
-        return self._rule(loc.level, requires)
+        rule = self._rule(loc.level, requires)
+        if loc.edgars:
+            player, need = self.player, loc.edgars
+            return lambda state: rule(state) and state.has(EDGAR, player, need)
+        return rule
 
     # ── Generation ──────────────────────────────────────────────────────
 
@@ -170,7 +174,7 @@ class AnimaniacsWorld(World):
         need = min(int(self.options.edgars_required), catalog.TOTAL_EDGARS)
         player = self.player
         if self.options.goal == GOAL_CREDITS:
-            final = self._rule(len(LEVELS) - 1, [])
+            final = self._location_rule(catalog.FINAL)
             self.multiworld.completion_condition[player] = \
                 lambda state: state.has(EDGAR, player, need) and final(state)
         else:

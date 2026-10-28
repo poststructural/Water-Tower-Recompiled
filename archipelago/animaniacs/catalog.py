@@ -36,6 +36,7 @@ class Loc(NamedTuple):
     kind: str
     requires: List[str]          # ability keys
     collectibles: int            # collectibles of its level it needs (milestones, 125/300 Edgars)
+    edgars: int                  # Edgars it needs received (CC Deville's)
 
 
 def _load() -> dict:
@@ -63,10 +64,12 @@ LEVELS: List[Level] = [
     for lv in RAW["levels"]]
 LOCATIONS: List[Loc] = [
     Loc(l["id"], l["name"], l["level"], l["kind"], list(l.get("requires", [])),
-        l.get("count", l.get("needs_collectibles", 0)))
+        l.get("count", l.get("needs_collectibles", 0)), l.get("needs_edgars", 0))
     for l in RAW["locations"]]
 
 TOTAL_EDGARS = sum(1 for l in LOCATIONS if l.kind == "edgar")
+# Beating CC Deville: the last Edgar, then the ending.
+FINAL = next(l for l in LOCATIONS if l.edgars)
 SIBLINGS = ("Wakko", "Dot")
 
 # Collectibles a level has that need the Shovel (dug up from under a dig tile).

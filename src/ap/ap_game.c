@@ -10,8 +10,13 @@ extern ptrdiff_t g_xbox_mem_offset;
 #define G32(va) (*(volatile uint32_t *)((uintptr_t)g_xbox_mem_offset + (uint32_t)(va)))
 #define GF(va)  (*(volatile float    *)((uintptr_t)g_xbox_mem_offset + (uint32_t)(va)))
 
-/* Guest pointers must land in the 64 MB of RAM, away from page zero. */
-static bool guest_ptr_ok(uint32_t va) { return va >= 0x10000u && va < 0x04000000u; }
+/* Guest pointers must land in RAM, away from page zero: the title's own
+ * addresses, or the kernel's mirror of it at 0x80000000 (where the game's
+ * objects are allocated). */
+static bool guest_ptr_ok(uint32_t va)
+{
+    return (va >= 0x10000u && va < 0x08000000u) || (va >= 0x80000000u && va < 0x88000000u);
+}
 
 int ani_game_level(void)
 {
@@ -51,6 +56,22 @@ bool ani_game_object_name(uint32_t obj, char *out, size_t n)
     for (i = 0; i + 1 < n && G8(s + i); i++) out[i] = (char)G8(s + i);
     out[i] = 0;
     return i > 0;
+}
+
+/* The player object (0x00307DF8, the "player" of 0x0009C590). */
+#define ANI_G_PLAYER 0x00307DF8u
+
+void ani_game_move_to_player(uint32_t obj)
+{
+    uint32_t player = G32(ANI_G_PLAYER), from, to, src;
+    if (!guest_ptr_ok(obj) || !guest_ptr_ok(player)) return;
+    from = G32(player + 0x2C);
+    to = G32(obj + 0x2C);
+    if (!guest_ptr_ok(from) || !guest_ptr_ok(to)) return;
+    src = from + (G8(from + 0x23) + 1u) * 0x40u + 0x30u;
+    for (uint32_t m = 1; m <= 2; m++)
+        for (uint32_t i = 0; i < 3; i++)
+            G32(to + m * 0x40u + 0x30u + i * 4u) = G32(src + i * 4u);
 }
 
 static int lower(int c) { return c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : c; }

@@ -39,6 +39,10 @@ uint32_t ani_game_pickup_state(uint32_t obj);
 uint32_t ani_game_pickup_type(uint32_t obj);
 /* The object's name, copied out; false if it has none. */
 bool ani_game_object_name(uint32_t obj, char *out, size_t n);
+/* Test switch (ANI_AP_TEST_COLLECT): puts a pickup where the player stands,
+ * by its scene node's world matrix (object +0x2C; the node keeps two, at
+ * +0x40 and +0x80, and byte +0x23 picks the current one: 0x001100A0). */
+void ani_game_move_to_player(uint32_t obj);
 int ani_stricmp(const char *a, const char *b);
 int ani_strnicmp(const char *a, const char *b, size_t n);
 /* A float variable of the running level's script store, by name, as the

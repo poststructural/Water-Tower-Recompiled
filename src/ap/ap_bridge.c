@@ -46,6 +46,7 @@ static struct {
     bool enabled;          /* --ap-server/--ap-slot given */
     bool bound;            /* a seed is known: the hooks act */
     bool log;              /* ANI_AP_LOG: capture details for the catalog */
+    bool test_collect;     /* ANI_AP_TEST_COLLECT: bring pickups to the player */
     char server[256], slot[64], password[128];
     char seed[128];
     char dir[1024];        /* <save>/archipelago/<seed>_<slot> */
@@ -553,6 +554,7 @@ const char *ani_ap_init(int *argc, char **argv, const char *save_dir)
     env_default(S.slot, sizeof S.slot, "ANI_AP_SLOT");
     env_default(S.password, sizeof S.password, "ANI_AP_PASSWORD");
     S.log = getenv("ANI_AP_LOG") && *getenv("ANI_AP_LOG") && *getenv("ANI_AP_LOG") != '0';
+    S.test_collect = getenv("ANI_AP_TEST_COLLECT") && *getenv("ANI_AP_TEST_COLLECT") != '0';
     if (!S.server[0] || !S.slot[0]) return NULL;
     S.enabled = true;
 
@@ -667,11 +669,18 @@ void ani_ap_hook_frame(ani_gen_fn gen)
     if (!S.bound) { gen(); return; }
     script_edgar = ani_game_edgar_pending();
     gen();
-    /* A script can hand an Edgar over without a pickup object (0x0009A9EE);
-     * none of the levels' scripts are known to, so it is only logged. */
-    if (script_edgar)
-        LOG("an Edgar was handed out by a script in level %d; please report this",
-            ani_game_level());
+    /* The one Edgar handed over without a pickup object (0x0009A9EE) is the
+     * last: beating CC Deville sets the flag, and the frames after it play
+     * the ending movie (GE2) and the credits. */
+    if (script_edgar) {
+        observe(ANI_AP_CC_DEVILLE_EDGAR);
+        if (!S.credits_reached) {
+            S.credits_reached = true;
+            LOG("beat CC Deville");
+            save_sidecar();
+            check_goal();
+        }
+    }
     /* Collectibles from before the session (or a save) count too. */
     if (++frames % 60 == 0) check_milestones();
 }
@@ -682,11 +691,37 @@ void ani_ap_hook_pickup(ani_gen_fn gen)
     if (!S.bound) { gen(); return; }
     obj = G32(g_esp + 4);           /* cdecl: the pickup object */
     before = ani_game_pickup_state(obj);
+    if (S.test_collect && before == 0) {
+        /* Every two seconds, one waiting pickup that is a check goes to the
+         * player, so a run collects them without anyone playing. */
+        static clock_t last;
+        char name[64];
+        int level = ani_game_level();
+        if (clock() - last > 2 * CLOCKS_PER_SEC && level >= 0 &&
+            ani_game_object_name(obj, name, sizeof name)) {
+            int64_t loc = pickup_location(level, name);
+            if (loc && !set_has(&S.checked, loc)) {
+                last = clock();
+                DBG("test: bringing %s to the player", name);
+                ani_game_move_to_player(obj);
+            }
+        }
+    }
     gen();
     after = ani_game_pickup_state(obj);
     /* Collected: the pickup reaches state 3 (a counted pickup, after its
      * counter goes up) or 4 (gone; 0x00027C80), which is also what a save
      * keeps (0x0009F370). 0xFFFF is a pickup not yet set up. */
+    if (S.log && before != after) {
+        static int seen;
+        char name[64] = "";
+        if (seen < 40) {
+            seen++;
+            ani_game_object_name(obj, name, sizeof name);
+            DBG("pickup %08X %s type %u state %u -> %u level %d", obj, name,
+                ani_game_pickup_type(obj), before, after, ani_game_level());
+        }
+    }
     if (after != before && (after == 3 || after == 4) && before != 0xFFFFu) {
         int level = ani_game_level();
         char name[64];
@@ -733,16 +768,4 @@ void ani_ap_hook_get_all_edgars(ani_gen_fn gen)
     GF(out) = (float)S.edgars;
     g_eax = (g_eax & 0xFFFFFF00u) | 1;
     g_esp += 4;       /* the generated body's ret: pop the return address */
-}
-
-/* SetReadyForCredits (0x000FC730), the script verb the ending calls. */
-void ani_ap_hook_credits(ani_gen_fn gen)
-{
-    if (S.bound && !S.credits_reached) {
-        S.credits_reached = true;
-        LOG("reached the credits");
-        save_sidecar();
-        check_goal();
-    }
-    gen();
 }

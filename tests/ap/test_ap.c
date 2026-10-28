@@ -74,7 +74,12 @@ static float *major_var(void) { return (float *)((uintptr_t)g_xbox_mem_offset + 
 /* Each fake body ends like a generated one: its ret pops the return address. */
 #define RET() (g_esp += 4)
 
-static void gen_frame(void) { RET(); }
+/* The level update clears the CC Deville flag as it hands the Edgar over. */
+static void gen_frame(void)
+{
+    *(uint8_t *)((uintptr_t)g_xbox_mem_offset + ANI_G_EDGAR_PENDING) = 0;
+    RET();
+}
 /* The pickup's own update: an Edgar goes straight to state 4, a counted
  * pickup (type 1) to state 3 once its counter is up; a waiting one stays. */
 static void gen_pickup_collect(void)
@@ -302,6 +307,15 @@ static void test_offline(int argc, char **argv)
     set_level(2);
     pickup(make_pickup(0, "Edgar_Boss", 3), gen_pickup_collect);
     CHECK(set_has(&S.checked, loc_named("Spooky Movie: Bride Boss Edgar")));
+    /* Beating CC Deville: the flag the next frame turns into the last Edgar
+     * and the ending. */
+    set_level(0);
+    CHECK(!S.credits_reached);
+    *(uint8_t *)((uintptr_t)g_xbox_mem_offset + ANI_G_EDGAR_PENDING) = 1;
+    g_esp = STACK;
+    ani_ap_hook_frame(gen_frame);
+    CHECK(g_esp == STACK + 4);
+    CHECK(set_has(&S.checked, ANI_AP_CC_DEVILLE_EDGAR) && S.credits_reached);
     CHECK(!all_acked());
     puts("offline ok");
 }
@@ -309,7 +323,7 @@ static void test_offline(int argc, char **argv)
 static void test_resume(int argc, char **argv)
 {
     boot(argc, argv);
-    CHECK(S.checked.n == 7 && !all_acked());
+    CHECK(S.checked.n == 8 && S.credits_reached && !all_acked());
     frames_until(connected, 10000, "Connected");
     frames_until(all_acked, 5000, "the offline check to be acknowledged");
     puts("resume ok");
