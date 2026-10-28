@@ -285,6 +285,16 @@ static void test_live(int argc, char **argv)
      * them are ours. Start inventory (Wakko, Dot) arrives too. */
     want_items = 5 + 2;
     frames_until(have_items, 5000, "items for the five checks sent");
+    /* Each came with a popup, and the counter knows them. */
+    {
+        AniUiToast t[8];
+        AniUiStatus st;
+        int n = ani_ui_toasts(t, 8, ani_ui_now_ms());
+        CHECK(n >= 1 && t[0].kind != ANI_UI_SENT);
+        ani_ui_get_status(&st);
+        CHECK(st.active && st.conn == ANI_UI_CONNECTED && st.edgars == S.edgars);
+        CHECK(st.cell[1][ANI_AP_KIND_EDGAR].found == 2 && st.cell[1][ANI_AP_KIND_EDGAR].total == 8);
+    }
     edgar_items = S.edgars;
     CHECK(get_all_edgars() == (float)edgar_items);
     /* The abilities the session owns follow what was received; Wakko and
@@ -383,12 +393,104 @@ static void test_ui(void)
     puts("ui ok");
 }
 
+static void feed(const char *json)
+{
+    AjValue *root = aj_parse(json);
+    CHECK(root && root->type == AJ_ARR);
+    for (const AjValue *p = root->child; p; p = p->next) handle_packet(p, S.generation);
+    aj_free(root);
+}
+
+static void test_names(const char *dir)
+{
+    AniUiToast t[8];
+    char cache[1100];
+    snprintf(cache, sizeof cache, "%s/datapackage", dir);
+    ani_mkdir(dir);
+    ani_mkdir(cache);
+    snprintf(S.names_dir, sizeof S.names_dir, "%s", cache);
+
+    /* A package is kept, cached and read back. */
+    ani_names_reset();
+    S.generation = 0;
+    feed("[{\"cmd\":\"DataPackage\",\"data\":{\"games\":{\"A Link to the Past\":"
+         "{\"checksum\":\"abc123\",\"item_name_to_id\":{\"Hookshot\":10,\"Bow\":11},"
+         "\"location_name_to_id\":{\"Link's House\":100}}}}}]");
+    CHECK(!strcmp(ani_names_item("A Link to the Past", 10), "Hookshot"));
+    ani_names_reset();
+    CHECK(!ani_names_item("A Link to the Past", 10));
+    ani_names_load(cache);
+    CHECK(!strcmp(ani_names_item("A Link to the Past", 11), "Bow"));
+    CHECK(!strcmp(ani_names_location("A Link to the Past", 100), "Link's House"));
+    CHECK(ani_names_have("A Link to the Past", "abc123") && !ani_names_have("A Link to the Past", "x"));
+
+    /* A broken cache file is skipped. */
+    {
+        char p[1200];
+        snprintf(p, sizeof p, "%s/Broken_zzz.json", cache);
+        FILE *f = fopen(p, "wb");
+        fputs("{\"game\":\"Broken\",\"item_name_to_id\":{", f);
+        fclose(f);
+        ani_names_reset();
+        ani_names_load(cache);
+        CHECK(!ani_names_item("Broken", 1) && ani_names_item("A Link to the Past", 10));
+    }
+
+    /* ItemSend popups, by who found it and who gets it. */
+    S.our_slot = 1;
+    snprintf(S.players[1], sizeof S.players[1], "Me");
+    snprintf(S.players[2], sizeof S.players[2], "Sam");
+    snprintf(S.games[1], sizeof S.games[1], "%s", ANI_AP_GAME);
+    snprintf(S.games[2], sizeof S.games[2], "A Link to the Past");
+    ani_ui_clear();
+    char pkt[512];
+    snprintf(pkt, sizeof pkt, "[{\"cmd\":\"PrintJSON\",\"type\":\"ItemSend\",\"receiving\":1,"
+             "\"item\":{\"item\":%lld,\"location\":100,\"player\":2,\"flags\":1},\"data\":[]}]",
+             (long long)ANI_AP_EDGAR_ITEM);
+    feed(pkt);
+    CHECK(ani_ui_toasts(t, 8, ani_ui_now_ms()) == 1);
+    CHECK(!strcmp(t[0].text, "Edgar from Sam") && t[0].kind == ANI_UI_RECEIVED && t[0].progression);
+    ani_ui_clear();
+    feed("[{\"cmd\":\"PrintJSON\",\"type\":\"ItemSend\",\"receiving\":2,"
+         "\"item\":{\"item\":10,\"location\":1095630848,\"player\":1,\"flags\":0},\"data\":[]}]");
+    CHECK(ani_ui_toasts(t, 8, ani_ui_now_ms()) == 1);
+    CHECK(!strcmp(t[0].text, "Hookshot for Sam") && t[0].kind == ANI_UI_SENT && !t[0].progression);
+    ani_ui_clear();
+    feed("[{\"cmd\":\"PrintJSON\",\"type\":\"ItemSend\",\"receiving\":2,"
+         "\"item\":{\"item\":99,\"location\":5,\"player\":3,\"flags\":0},\"data\":[]}]");
+    CHECK(ani_ui_toasts(t, 8, ani_ui_now_ms()) == 0);   /* not ours either way */
+    feed("[{\"cmd\":\"PrintJSON\",\"type\":\"ItemSend\",\"receiving\":2,"
+         "\"item\":{\"item\":12345,\"location\":5,\"player\":1,\"flags\":0},\"data\":[]}]");
+    CHECK(ani_ui_toasts(t, 8, ani_ui_now_ms()) == 1 && !strcmp(t[0].text, "an item for Sam"));
+
+    /* Items that came while away: one popup with the count. */
+    ani_ui_clear();
+    S.generation = 1;
+    S.item_count = 3;
+    for (int i = 0; i < 3; i++) S.items[i] = ANI_AP_FILLER_ITEM;
+    snprintf(S.sidecar, sizeof S.sidecar, "%s/ap_state.json", dir);
+    {
+        AjBuf b = {0};
+        ajb_raw(&b, "[{\"cmd\":\"ReceivedItems\",\"index\":0,\"items\":[");
+        for (int i = 0; i < 10; i++)
+            ajb_fmt(&b, "%s{\"item\":%lld,\"location\":0,\"player\":2,\"flags\":0}",
+                    i ? "," : "", (long long)ANI_AP_FILLER_ITEM);
+        ajb_raw(&b, "]}]");
+        feed(b.buf);
+        ajb_free(&b);
+    }
+    CHECK(ani_ui_toasts(t, 8, ani_ui_now_ms()) == 1 && !strcmp(t[0].text, "Received 7 items"));
+    S.generation = 0;
+    puts("names ok");
+}
+
 int main(int argc, char **argv)
 {
     setvbuf(stdout, NULL, _IONBF, 0);
     if (argc >= 2 && !strcmp(argv[1], "json")) test_json();
     else if (argc >= 2 && !strcmp(argv[1], "game")) test_game();
     else if (argc >= 2 && !strcmp(argv[1], "ui")) test_ui();
+    else if (argc >= 3 && !strcmp(argv[1], "names")) test_names(argv[2]);
     else if (argc >= 5 && !strcmp(argv[1], "live")) test_live(argc, argv);
     else if (argc >= 5 && !strcmp(argv[1], "offline")) test_offline(argc, argv);
     else if (argc >= 5 && !strcmp(argv[1], "resume")) test_resume(argc, argv);

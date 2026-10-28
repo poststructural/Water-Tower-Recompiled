@@ -74,6 +74,7 @@ set(ANI_AP_SOURCES
     ${ANI_ROOT}/src/ap/ap_bridge.c
     ${ANI_ROOT}/src/ap/ap_game.c
     ${ANI_ROOT}/src/ap/ap_ui.c
+    ${ANI_ROOT}/src/ap/ap_names.c
     ${ANI_ROOT}/src/ap/ap_json.c
     ${ANI_ROOT}/src/ap/ap_net.c
     ${ANI_ROOT}/src/ap/ap_ws_posix.c

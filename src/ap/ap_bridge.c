@@ -2,7 +2,9 @@
 #include "ap_catalog.h"
 #include "ap_game.h"
 #include "ap_json.h"
+#include "ap_names.h"
 #include "ap_net.h"
+#include "ap_ui.h"
 
 #include <errno.h>
 #include <stdint.h>
@@ -70,12 +72,19 @@ static struct {
     bool refused;
     int our_slot;
     char players[64][40];  /* slot -> name, from Connected */
+    char games[64][64];    /* slot -> game, from Connected */
+    char names_dir[1100];  /* cached data packages */
+    struct { char game[64], checksum[72]; } wanted[64];  /* RoomInfo's checksums */
+    int wanted_n;
     uint16_t ap_bits;      /* abilities received */
     int edgars;            /* Edgars received */
 } S;
 
 #define LOG(...) do { printf("[AP] " __VA_ARGS__); putchar('\n'); fflush(stdout); } while (0)
 #define DBG(...) do { if (S.log) LOG(__VA_ARGS__); } while (0)
+
+static void push_status(void);
+static void toast(AniUiKind kind, bool progression, const char *text);
 
 static bool loc_ok(int64_t v) { return v >= ANI_AP_BASE_ID && v < ANI_AP_BASE_ID + LOC_SPAN; }
 
@@ -290,10 +299,38 @@ static void check_goal(void)
         return;
     send_cmd("[{\"cmd\":\"StatusUpdate\",\"status\":30}]");
     S.goal_sent = true;
+    toast(ANI_UI_INFO, true, "Goal complete!");
     if (S.goal == GOAL_CREDITS)
         LOG("goal: the credits, with %d Edgars received", S.edgars);
     else
         LOG("goal: %d Edgars received", S.edgars);
+}
+
+/* ── Overlay ───────────────────────────────────────────────── */
+
+static void push_status(void)
+{
+    AniUiStatus st;
+    memset(&st, 0, sizeof st);
+    st.active = S.bound;
+    st.edgars = S.edgars;
+    st.required = S.edgars_required;
+    st.goal = S.goal;
+    st.conn = S.generation ? ANI_UI_CONNECTED : S.refused ? ANI_UI_OFFLINE : ANI_UI_CONNECTING;
+    st.kinds = S.have_slot_data ? S.kinds : 0xFFFFFFFFu;
+    for (int i = 0; i < ANI_AP_NAMES; i++) {
+        int64_t id = ani_ap_location_names[i].id;
+        int kind = ANI_AP_KIND_OF(id), level = ANI_UI_LEVEL_OF(id);
+        if (kind < 0 || kind > ANI_AP_KIND_ABILITY || level >= ANI_AP_LEVELS) continue;
+        st.cell[level][kind].total++;
+        if (set_has(&S.checked, id)) st.cell[level][kind].found++;
+    }
+    ani_ui_set_status(&st);
+}
+
+static void toast(AniUiKind kind, bool progression, const char *text)
+{
+    ani_ui_notify(kind, progression, text, ani_ui_now_ms());
 }
 
 static void observe(int64_t location)
@@ -307,6 +344,7 @@ static void observe(int64_t location)
         LOG("check: %s", name ? name : "?");
     save_sidecar();
     send_pending();
+    push_status();
 }
 
 static void on_received_items(const AjValue *p)
@@ -330,12 +368,22 @@ static void on_received_items(const AjValue *p)
     recount();
     if (S.item_count != before || S.edgars != old_edgars || S.ap_bits != old_bits)
         save_sidecar();
-    if (index != 0)
+    if (index != 0) {
         for (int i = before; i < S.item_count; i++)
             LOG("received %s", item_name(S.items[i]));
-    else
+    } else {
         LOG("inventory: %d Edgars, abilities 0x%03X (%d items)", S.edgars, S.ap_bits, S.item_count);
+        /* What came while the game was away is one popup, not a flood (the
+         * ones that arrive while connected get theirs from PrintJSON). */
+        if (S.item_count > before) {
+            char t[64];
+            snprintf(t, sizeof t, "Received %d item%s", S.item_count - before,
+                     S.item_count - before == 1 ? "" : "s");
+            toast(ANI_UI_INFO, false, t);
+        }
+    }
     check_goal();
+    push_status();
 }
 
 static uint16_t bits_of(const AjValue *arr)
@@ -344,6 +392,69 @@ static uint16_t bits_of(const AjValue *arr)
     for (const AjValue *c = arr ? arr->child : NULL; c; c = c->next)
         bits |= (uint16_t)aj_int(c, 0);
     return bits;
+}
+
+/* Data packages for the room's games that aren't cached yet (ours is in
+ * the catalog). */
+static void request_names(void)
+{
+    AjBuf b = {0};
+    int n = 0;
+    ajb_raw(&b, "[{\"cmd\":\"GetDataPackage\",\"games\":[");
+    for (int i = 0; i < S.wanted_n; i++) {
+        if (!strcmp(S.wanted[i].game, ANI_AP_GAME) ||
+            ani_names_have(S.wanted[i].game, S.wanted[i].checksum))
+            continue;
+        if (n++) ajb_raw(&b, ",");
+        ajb_str(&b, S.wanted[i].game);
+    }
+    ajb_raw(&b, "]}]");
+    if (n && !b.oom) send_cmd(b.buf);
+    ajb_free(&b);
+}
+
+static void on_data_package(const AjValue *p)
+{
+    const AjValue *games = aj_get(aj_get(p, "data"), "games");
+    for (const AjValue *g = games ? games->child : NULL; g; g = g->next)
+        if (g->key && !ani_names_add(g->key, g, S.names_dir))
+            LOG("unreadable data package for %s", g->key);
+}
+
+static const char *slot_game(int slot)
+{
+    return slot > 0 && slot < 64 && S.games[slot][0] ? S.games[slot] : NULL;
+}
+
+static const char *player_name(int slot)
+{
+    return slot > 0 && slot < 64 && S.players[slot][0] ? S.players[slot] : "someone";
+}
+
+static const char *any_item_name(int slot, int64_t item)
+{
+    const char *n = slot == S.our_slot ? item_name(item) : ani_names_item(slot_game(slot), item);
+    return n ? n : "an item";
+}
+
+/* PrintJSON ItemSend: a popup when we found it or we get it. */
+static void on_item_send(const AjValue *p)
+{
+    const AjValue *it = aj_get(p, "item");
+    int to = (int)aj_int(aj_get(p, "receiving"), 0);
+    int from = (int)aj_int(aj_get(it, "player"), 0);
+    int64_t item = aj_int(aj_get(it, "item"), 0);
+    bool prog = (aj_int(aj_get(it, "flags"), 0) & 1) != 0;
+    char t[160];
+    if (to == S.our_slot && from == S.our_slot)
+        snprintf(t, sizeof t, "%s", any_item_name(to, item));
+    else if (to == S.our_slot)
+        snprintf(t, sizeof t, "%s from %s", any_item_name(to, item), player_name(from));
+    else if (from == S.our_slot)
+        snprintf(t, sizeof t, "%s for %s", any_item_name(to, item), player_name(to));
+    else
+        return;
+    toast(to == S.our_slot ? ANI_UI_RECEIVED : ANI_UI_SENT, prog, t);
 }
 
 static void on_connected(const AjValue *p, uint64_t generation)
@@ -368,6 +479,12 @@ static void on_connected(const AjValue *p, uint64_t generation)
             snprintf(S.players[slot], sizeof S.players[slot], "%s",
                      aj_str(aj_get(c, "alias"), aj_str(aj_get(c, "name"), "")));
     }
+    for (const AjValue *c = aj_get(p, "slot_info") ? aj_get(p, "slot_info")->child : NULL; c; c = c->next) {
+        long slot = c->key ? strtol(c->key, NULL, 10) : 0;
+        if (slot > 0 && slot < 64)
+            snprintf(S.games[slot], sizeof S.games[slot], "%s", aj_str(aj_get(c, "game"), ""));
+    }
+    request_names();
     S.edgars_required = (int)aj_int(aj_get(sd, "edgars_required"), 30);
     S.goal = (int)aj_int(aj_get(sd, "goal"), GOAL_EDGARS);
     S.kinds = 0;
@@ -388,6 +505,7 @@ static void on_connected(const AjValue *p, uint64_t generation)
         S.goal == GOAL_CREDITS ? "the credits" : "receiving", S.edgars_required, S.shuffled_mask);
     send_pending();
     check_goal();
+    push_status();
 }
 
 static void on_room_update(const AjValue *p)
@@ -400,8 +518,8 @@ static void on_room_update(const AjValue *p)
 }
 
 /* PrintJSON parts carry IDs; names come from Connected (players) and the
- * catalog (this game's items and locations). Other games' names would need
- * their data packages, which this client does not fetch. */
+ * catalog (this game's items and locations), other games' from their data
+ * packages (ap_names.c). */
 static void on_print(const AjValue *p)
 {
     const AjValue *data = aj_get(p, "data");
@@ -419,13 +537,18 @@ static void on_print(const AjValue *p)
         else if (!strcmp(type, "location_id") && ours)
             name = location_name(id);
         else if (!strcmp(type, "item_id"))
-            name = "an item";
+            name = ani_names_item(slot_game((int)aj_int(aj_get(c, "player"), 0)), id);
         else if (!strcmp(type, "location_id"))
+            name = ani_names_location(slot_game((int)aj_int(aj_get(c, "player"), 0)), id);
+        if (!name && !strcmp(type, "item_id"))
+            name = "an item";
+        else if (!name && !strcmp(type, "location_id"))
             name = "somewhere";
         ajb_raw(&b, name ? name : text);
     }
     if (b.buf && b.len) LOG("%s", b.buf);
     ajb_free(&b);
+    if (!strcmp(aj_str(aj_get(p, "type"), ""), "ItemSend")) on_item_send(p);
 }
 
 static void handle_packet(const AjValue *p, uint64_t generation)
@@ -438,7 +561,18 @@ static void handle_packet(const AjValue *p, uint64_t generation)
                 "restart the game to switch seeds", seed, S.seed);
             S.refused = true;
             ani_net_stop();
+            push_status();
         }
+        S.wanted_n = 0;
+        for (const AjValue *c = aj_get(p, "datapackage_checksums") ?
+                 aj_get(p, "datapackage_checksums")->child : NULL; c && S.wanted_n < 64; c = c->next) {
+            if (!c->key) continue;
+            snprintf(S.wanted[S.wanted_n].game, sizeof S.wanted[0].game, "%s", c->key);
+            snprintf(S.wanted[S.wanted_n].checksum, sizeof S.wanted[0].checksum, "%s", aj_str(c, ""));
+            S.wanted_n++;
+        }
+    } else if (!strcmp(cmd, "DataPackage")) {
+        on_data_package(p);
     } else if (!strcmp(cmd, "Connected")) {
         on_connected(p, generation);
     } else if (!strcmp(cmd, "ConnectionRefused")) {
@@ -452,6 +586,7 @@ static void handle_packet(const AjValue *p, uint64_t generation)
         ajb_free(&b);
         S.refused = true;
         ani_net_stop();
+        push_status();
     } else if (!strcmp(cmd, "ReceivedItems")) {
         if (generation == S.generation) on_received_items(p);
     } else if (!strcmp(cmd, "RoomUpdate")) {
@@ -479,6 +614,7 @@ static void pump_network(void)
                     LOG("disconnected (%s); playing offline, checks will be sent on reconnect",
                         ev[i].text ? ev[i].text : "");
                     S.generation = 0;
+                    push_status();
                 } else if (!S.generation) {
                     DBG("cannot reach the server: %s", ev[i].text ? ev[i].text : "");
                 }
@@ -607,7 +743,11 @@ const char *ani_ap_init(int *argc, char **argv, const char *save_dir)
     ani_mkdir(S.dir);
     snprintf(S.sidecar, sizeof S.sidecar, "%s/ap_state.json", S.dir);
     if (!load_sidecar()) save_sidecar();
+    snprintf(S.names_dir, sizeof S.names_dir, "%s/datapackage", base);
+    ani_mkdir(S.names_dir);
+    ani_names_load(S.names_dir);
     S.bound = true;
+    push_status();
     LOG("seed %s: saves in %s", S.seed, S.dir);
     return S.dir;
 }
