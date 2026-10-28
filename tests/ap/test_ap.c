@@ -12,6 +12,7 @@
  */
 #include "../../src/ap/ap_bridge.c"
 #include "../../src/ap/ap_ui.h"
+#include "../../src/ap/ap_font.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -484,6 +485,45 @@ static void test_names(const char *dir)
     puts("names ok");
 }
 
+/* ── Text ──────────────────────────────────────────────────── */
+
+/* A buffer with a guard band around it, to catch writes outside the clip. */
+#define FW 200
+#define FH 50
+#define GUARD 4096
+static uint32_t fbuf[GUARD + FW * FH + GUARD];
+
+static void font_case(bool truetype)
+{
+    uint32_t *px = fbuf + GUARD;
+    int changed = 0;
+    memset(fbuf, 0x11, sizeof fbuf);
+    for (int i = 0; i < FW * FH; i++) px[i] = 0xFF000000u;
+    int wdt = ani_font_draw(px, FW, FH, 10, 10, 20, 0xFFFFFFFFu, "Edgar");
+    CHECK(wdt > 20 && wdt == ani_font_width(20, "Edgar"));
+    for (int y = 0; y < FH; y++)
+        for (int x = 0; x < FW; x++)
+            if (px[y * FW + x] != 0xFF000000u) {
+                changed++;
+                CHECK(x >= 8 && x < 10 + wdt + 4 && y >= 6 && y < 40);
+            }
+    CHECK(changed > 40);
+    /* Clipped at every edge. */
+    ani_font_draw(px, FW, FH, -30, -8, 30, 0xFFFFFFFFu, "Clip me");
+    ani_font_draw(px, FW, FH, 190, 40, 30, 0xFFFFFFFFu, "Clip me");
+    ani_fill(px, FW, FH, -10, -10, FW + 20, FH + 20, 0x80FF0000u);
+    for (int i = 0; i < GUARD; i++) CHECK(fbuf[i] == 0x11111111u && fbuf[GUARD + FW * FH + i] == 0x11111111u);
+    /* Names from other games: drawn, never a crash. */
+    CHECK(ani_font_width(20, "Zo\xc3\xab \xe6\x97\xa5\xe6\x9c\xac \xf0\x9f\x98\x80") > 0);
+    CHECK(ani_font_width(20, "bad \xc3") > 0);
+    printf("font ok (%s)\n", truetype ? "TrueType" : "built-in strokes");
+}
+
+static void test_font(void)
+{
+    font_case(ani_font_init());
+}
+
 int main(int argc, char **argv)
 {
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -491,6 +531,7 @@ int main(int argc, char **argv)
     else if (argc >= 2 && !strcmp(argv[1], "game")) test_game();
     else if (argc >= 2 && !strcmp(argv[1], "ui")) test_ui();
     else if (argc >= 3 && !strcmp(argv[1], "names")) test_names(argv[2]);
+    else if (argc >= 2 && !strcmp(argv[1], "font")) test_font();
     else if (argc >= 5 && !strcmp(argv[1], "live")) test_live(argc, argv);
     else if (argc >= 5 && !strcmp(argv[1], "offline")) test_offline(argc, argv);
     else if (argc >= 5 && !strcmp(argv[1], "resume")) test_resume(argc, argv);

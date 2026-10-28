@@ -75,6 +75,7 @@ set(ANI_AP_SOURCES
     ${ANI_ROOT}/src/ap/ap_game.c
     ${ANI_ROOT}/src/ap/ap_ui.c
     ${ANI_ROOT}/src/ap/ap_names.c
+    ${ANI_ROOT}/src/ap/ap_font.c
     ${ANI_ROOT}/src/ap/ap_json.c
     ${ANI_ROOT}/src/ap/ap_net.c
     ${ANI_ROOT}/src/ap/ap_ws_posix.c
@@ -93,7 +94,9 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${ANI_ROOT}/src
     ${ANI_ROOT}/src/recomp/gen
     ${XBOXRECOMP_DIR}/include
-    ${XBOXRECOMP_DIR}/src)
+    ${XBOXRECOMP_DIR}/src
+    ${XBOXRECOMP_DIR}/src/nv2a_vk/host
+    ${XBOXRECOMP_DIR}/third_party/stb)
 target_compile_options(${PROJECT_NAME} PRIVATE -O2 -fno-strict-aliasing)
 
 if(WIN32)
