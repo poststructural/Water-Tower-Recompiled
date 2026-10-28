@@ -113,12 +113,28 @@ and keyboard keys are in [docs/CONTROLS.md](docs/CONTROLS.md).
 Test switches: `ANI_LEVEL=N` (1-5) loads level N instead of the hub;
 `RECOMP_AUDIO_WAV=out.wav` records the audio output.
 
+## Archipelago randomizer (experimental)
+
+The Vulkan build has an [Archipelago](https://archipelago.gg) client built in.
+Every pickup the game places can be a check: 45 Edgars, 24 ACME letters, 6 script
+pages, 30 quest items, the collectibles (72 milestones, or all 1800) and 253 apples,
+plus the 11 abilities if they are shuffled. The Edgars you receive open the movie
+sets; the goal is an Edgar count or beating CC Deville. The launcher's Archipelago
+tab sets the room and saves the `.apworld`; by hand, `python scripts/build_apworld.py`
+and `--ap-server HOST:PORT --ap-slot NAME`. After pulling this, re-run
+`scripts/regen.sh` (the hooks wrap four lifted functions). See
+[docs/ARCHIPELAGO.md](docs/ARCHIPELAGO.md).
+
 ## Layout
 
 ```
 src/main.c              host entry (MSVC build): loads the XBE, boots the kernel layer, calls the guest
 src/main_vk.c           host entry (Vulkan build): window, GPU model, virtual CPU
 src/recomp_manual.c     hand-written overrides for lifted functions
+src/ap/                 the in-process Archipelago client
+archipelago/animaniacs/ the Archipelago world (catalog.json holds every ID)
+tools/hog/              reads the game's .hog archives (the catalog is built from them)
+tests/ap/               host tests for the client, incl. a live-server run
 src/recomp/gen/         generated C (not committed; produced by scripts/regen.sh)
 tools/xboxrecomp/       the toolkit (git submodule)
 tools/ngbrecomp/        ngbrecomp, for its xboxrecomp fork (git submodule)

@@ -26,3 +26,4 @@ stderr.txt
 /launcher/dist/
 /launcher/*.spec
 __pycache__/
+/build-aptest/

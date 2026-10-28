@@ -198,6 +198,18 @@ void sub_0014F4C0(void)
 #endif
 }
 
+/* ── Archipelago (src/ap/ap_bridge.c) ──────────────────────── */
+
+/* Without a session (or in the MSVC build, which has no client) each of these
+ * is the generated body and nothing else. Evidence for the addresses is in
+ * docs/ARCHIPELAGO.md. */
+#if defined(ANI_AP)
+#include "ap/ap_bridge.h"
+#define ANI_AP_HOOK(hook, gen) hook(gen)
+#else
+#define ANI_AP_HOOK(hook, gen) gen()
+#endif
+
 /* Game state machine step (0x000B09A0): when the requested state at
  * 0x00313A70 differs from the current one at 0x00313B54 it tears the old one
  * down and enters the new. States 3..8 are the levels (3 = level 0, the
@@ -228,6 +240,9 @@ void sub_000B09A0(void)
         fprintf(stderr, "[ANI] ANI_LEVEL: entering level %d instead of the hub\n", want);
         GUEST32(ANI_STATE_REQUESTED) = 3u + (uint32_t)want;
     }
+#if defined(ANI_AP)
+    ani_ap_main_loop();   /* network and item grants, in menus too */
+#endif
     sub_000B09A0_gen();
 #if defined(ANI_NV2A_VK)
     /* The frontend (states below 3) draws its stage as a full-screen 4:3
@@ -518,9 +533,31 @@ void sub_0014DD80(void)
     sub_0014DD80_gen();
 }
 
+/* The level's per-frame update (0x0009A9C0): the Edgar a script hands out
+ * is counted at the top of this function. */
+extern void sub_0009A9C0_gen(void);
+void sub_0009A9C0(void) { ANI_AP_HOOK(ani_ap_hook_frame, sub_0009A9C0_gen); }
+
+/* Pickup update (0x00027E00, called through the object type table at
+ * 0x001E363C), once a frame for each pickup object: the client sees which
+ * one was collected. */
+extern void sub_00027E00_gen(void);
+void sub_00027E00(void) { ANI_AP_HOOK(ani_ap_hook_pickup, sub_00027E00_gen); }
+
+/* GiveAbility (0x0009F840): ORs its argument into the ability word. */
+extern void sub_0009F840_gen(void);
+void sub_0009F840(void) { ANI_AP_HOOK(ani_ap_hook_give_ability, sub_0009F840_gen); }
+
+/* The GetAllEdgars script binding (0x000FD450): what opens the movie sets. */
+extern void sub_000FD450_gen(void);
+void sub_000FD450(void) { ANI_AP_HOOK(ani_ap_hook_get_all_edgars, sub_000FD450_gen); }
 
 recomp_func_t recomp_lookup_manual(uint32_t xbox_va)
 {
+    /* The dispatch table maps a wrapped function to its generated body, so
+     * the hooks reached through function pointers are returned here. */
+    if (xbox_va == 0x00027E00u) return sub_00027E00;
+    if (xbox_va == 0x000FD450u) return sub_000FD450;
     /*
      * TODO: Add your overrides here. Examples:
      *

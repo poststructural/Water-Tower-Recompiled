@@ -74,6 +74,11 @@ class Settings:
     # Play an exe built elsewhere (a developer checkout) instead of a managed build.
     custom_exe: str = ""
     extra_env: dict[str, str] = field(default_factory=dict)
+    # Archipelago (archipelago.py): Play joins this room as this slot.
+    ap_enabled: bool = False
+    ap_server: str = ""
+    ap_slot: str = ""
+    ap_password: str = ""
 
     @staticmethod
     def path() -> str:

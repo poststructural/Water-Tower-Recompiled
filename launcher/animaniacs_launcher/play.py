@@ -8,7 +8,7 @@ import subprocess
 import sys
 import time
 
-from . import build, config, mods, profiles
+from . import archipelago, build, config, mods, profiles
 
 
 class PlayError(Exception):
@@ -47,10 +47,15 @@ def launch(settings: config.Settings, game_dir: str | None = None) -> tuple[subp
         except (mods.ModError, OSError) as e:
             raise PlayError(f"could not apply the mods: {e}")
     exe, dirs = current_exe(settings)
+    try:
+        ap_args, ap_env = archipelago.args(settings)
+    except archipelago.ApError as e:
+        raise PlayError(str(e))
     env = dict(os.environ)
     env["PATH"] = os.pathsep.join([*dirs, env.get("PATH", "")])
     env.update(profiles.env(settings.profile))
     env.update(settings.extra_env)
+    env.update(ap_env)
     os.makedirs(config.sub("logs"), exist_ok=True)
     log_path = config.sub("logs", time.strftime("game-%Y%m%d-%H%M%S.txt"))
     _prune_logs(keep=10)
@@ -61,7 +66,7 @@ def launch(settings: config.Settings, game_dir: str | None = None) -> tuple[subp
     else:
         out, err, flags = log, subprocess.STDOUT, 0
     try:
-        p = subprocess.Popen([exe, game_dir], cwd=os.path.dirname(exe), env=env,
+        p = subprocess.Popen([exe, game_dir, *ap_args], cwd=os.path.dirname(exe), env=env,
                              stdout=out, stderr=err, stdin=subprocess.DEVNULL,
                              creationflags=flags)
     except OSError as e:

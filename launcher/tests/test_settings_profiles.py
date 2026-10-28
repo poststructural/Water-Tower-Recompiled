@@ -116,3 +116,22 @@ def test_hud_option_defaults_and_saves():
     gamesettings.apply(ini, {"display.hud": "stretch"})
     assert ini.get("display", "hud") == "stretch"
     assert gamesettings.value(gamesettings.IniFile("[display]\n"), "display.hud") == "4:3"
+
+
+def test_archipelago_overlay_switches():
+    ini = gamesettings.IniFile(gamesettings.FALLBACK_TEMPLATE)
+    for key in ("notifications", "tracker", "hud"):
+        assert gamesettings.value(ini, "archipelago." + key) == "on"
+    gamesettings.apply(ini, {"archipelago.tracker": "off"})
+    assert ini.get("archipelago", "tracker") == "off"
+    # A file from before 2.1 has no [archipelago] section: on, and saving adds it.
+    old = gamesettings.IniFile("[display]\nshow_fps = off\n")
+    assert gamesettings.value(old, "archipelago.notifications") == "on"
+    gamesettings.apply(old, {"archipelago.notifications": "off"})
+    assert old.get("archipelago", "notifications") == "off"
+    assert "[archipelago]" in old.text()
+
+
+def test_fallback_template_matches_the_game():
+    src = os.path.join(os.path.dirname(__file__), "..", "..")
+    assert gamesettings.template_from_source(src) == gamesettings.FALLBACK_TEMPLATE

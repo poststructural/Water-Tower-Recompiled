@@ -15,7 +15,7 @@ cmake_minimum_required(VERSION 3.20)
 #   TK=tools/ngbrecomp/xboxrecomp scripts/regen.sh
 # ============================================================================
 
-project(animaniacs_vk VERSION 1.0.0 LANGUAGES C CXX)
+project(animaniacs_vk VERSION 2.1.0 LANGUAGES C CXX)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -69,19 +69,35 @@ target_link_libraries(ani_gen PRIVATE platform)
 target_compile_options(ani_gen PRIVATE
     -O2 -fno-strict-aliasing -fwrapv -w)
 
+# The in-process Archipelago client (src/ap, docs/ARCHIPELAGO.md).
+set(ANI_AP_SOURCES
+    ${ANI_ROOT}/src/ap/ap_bridge.c
+    ${ANI_ROOT}/src/ap/ap_game.c
+    ${ANI_ROOT}/src/ap/ap_ui.c
+    ${ANI_ROOT}/src/ap/ap_names.c
+    ${ANI_ROOT}/src/ap/ap_font.c
+    ${ANI_ROOT}/src/ap/ap_hud.c
+    ${ANI_ROOT}/src/ap/ap_json.c
+    ${ANI_ROOT}/src/ap/ap_net.c
+    ${ANI_ROOT}/src/ap/ap_ws_posix.c
+    ${ANI_ROOT}/src/ap/ap_ws_winhttp.c)
+
 add_executable(${PROJECT_NAME}
     ${ANI_ROOT}/src/main_vk.c
     ${ANI_ROOT}/src/settings.c
     ${ANI_ROOT}/src/recomp_manual.c
+    ${ANI_AP_SOURCES}
     $<TARGET_OBJECTS:ani_gen>)
-target_compile_definitions(${PROJECT_NAME} PRIVATE ANI_NV2A_VK
+target_compile_definitions(${PROJECT_NAME} PRIVATE ANI_NV2A_VK ANI_AP
     ANI_VERSION="${PROJECT_VERSION}")
 target_link_libraries(${PROJECT_NAME} PRIVATE xboxrecomp xbox_nv2a_vk)
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${ANI_ROOT}/src
     ${ANI_ROOT}/src/recomp/gen
     ${XBOXRECOMP_DIR}/include
-    ${XBOXRECOMP_DIR}/src)
+    ${XBOXRECOMP_DIR}/src
+    ${XBOXRECOMP_DIR}/src/nv2a_vk/host
+    ${XBOXRECOMP_DIR}/third_party/stb)
 target_compile_options(${PROJECT_NAME} PRIVATE -O2 -fno-strict-aliasing)
 
 if(WIN32)
@@ -90,7 +106,7 @@ if(WIN32)
     option(ANI_GUI "Build without a console window" ON)
     set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME Animaniacs
                           WIN32_EXECUTABLE ${ANI_GUI})
-    target_link_libraries(${PROJECT_NAME} PRIVATE winmm dbghelp)
+    target_link_libraries(${PROJECT_NAME} PRIVATE winmm dbghelp winhttp)
     # A PDB beside the exe: every lifted function is a symbol (sub_XXXXXXXX),
     # so crash reports and scripts/sample_profile.py name guest functions.
     target_link_options(${PROJECT_NAME} PRIVATE -Wl,--pdb=)

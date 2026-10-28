@@ -33,6 +33,17 @@ the file, for testing.
 |---|---|---|---|
 | `skip_intro` | `on`, `off` | `off` | Skips the publisher logos and the intro movie. |
 
+## [archipelago]
+
+Only matter during an Archipelago session ([ARCHIPELAGO.md](ARCHIPELAGO.md)).
+
+| Key | Values | Default | |
+|---|---|---|---|
+| `notifications` | `on`, `off` | `on` | Popups, top right, for items you receive and items your checks send to others. |
+| `chat` | `on`, `off` | `on` | Chat, server messages and countdowns as popups too. Hints about your items or checks always show. |
+| `tracker` | `on`, `off` | `on` | The tracker screen: Tab or F1, or hold the controller's Back for half a second. |
+| `hud` | `on`, `off` | `on` | The Edgar counter, bottom left, with a light for the connection. |
+
 ## Keys from the first version
 
 Still read, so older files and launchers keep working; new files don't

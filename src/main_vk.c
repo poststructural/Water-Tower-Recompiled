@@ -9,6 +9,7 @@
  * Game data: a "game" directory next to the executable (default.xbe,
  * resource/, movies/, tkaXBoxDSPImage.bin), ANI_GAME_DIR, or argv[1].
  * Saves: ANI_SAVE_DIR, else %LOCALAPPDATA%/AnimaniacsRecompiled.
+ * Archipelago: --ap-server HOST:PORT --ap-slot NAME (docs/ARCHIPELAGO.md).
  *
  * Renderer: ANI_RENDERER=xemu (default, a window), null (no window).
  */
@@ -36,8 +37,10 @@
 #include "nv2a_vk_runtime.h"
 #include "nv2a_window.h"
 #include "settings.h"
+#include "ap/ap_hud.h"
 #define SDL_MAIN_HANDLED   /* our own main(), not SDL_main */
 #include <SDL.h>
+#include "ap/ap_bridge.h"
 
 extern void xbox_InputInit(void);
 
@@ -51,6 +54,7 @@ extern void xbe_entry_point(void);
 extern int recomp_dispatch_init(void);
 
 static char s_game_dir[4096];
+static char s_save_dir[4096];
 static bool s_headless;
 static AniSettings s_settings;
 
@@ -321,10 +325,8 @@ static void *guest_main(void *unused)
     xbox_kernel_init();
     {
         extern void xbox_path_init(const char *game_dir, const char *save_dir);
-        char save_dir[4096];
-        save_dir_path(save_dir, sizeof(save_dir));
-        printf("Save directory: %s\n", save_dir);
-        xbox_path_init(s_game_dir, save_dir);
+        printf("Save directory: %s\n", s_save_dir);
+        xbox_path_init(s_game_dir, s_save_dir);
     }
     xbox_kernel_bridge_init();
     xbox_OhciInit();
@@ -458,6 +460,16 @@ int main(int argc, char **argv)
      * acknowledge its commands (found from GPSADDR; patches/ngbrecomp-0001). */
     set_default("RECOMP_APU_DSP_ACK", "auto");
 
+    /* Archipelago: --ap-server/--ap-slot (consumed here). A session picks
+     * its own save directory, one per seed. */
+    save_dir_path(s_save_dir, sizeof s_save_dir);
+    ani_mkdirs(s_save_dir);
+    {
+        const char *ap_dir = ani_ap_init(&argc, argv, s_save_dir);
+        if (ap_dir)
+            snprintf(s_save_dir, sizeof s_save_dir, "%s", ap_dir);
+    }
+
     if (argc > 1)
         snprintf(s_game_dir, sizeof s_game_dir, "%s", argv[1]);
     else if (getenv("ANI_GAME_DIR"))
@@ -479,6 +491,8 @@ int main(int argc, char **argv)
         ani_settings_load(&s_settings, exe, save);
         ani_skip_intro = s_settings.skip_intro;
         ani_hud_43 = !s_settings.hud_stretch;
+        ani_hud_configure(s_settings.ap_notifications, s_settings.ap_tracker, s_settings.ap_hud,
+                          s_settings.ap_chat);
         printf("Settings: %s\n", s_settings.path);
     }
 
