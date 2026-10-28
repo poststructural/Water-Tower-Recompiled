@@ -1,0 +1,88 @@
+diff --git a/xboxrecomp/src/kernel/xbox_memory_layout.c b/xboxrecomp/src/kernel/xbox_memory_layout.c
+index 1fdb88b..f32a9f9 100644
+--- a/xboxrecomp/src/kernel/xbox_memory_layout.c
++++ b/xboxrecomp/src/kernel/xbox_memory_layout.c
+@@ -59,6 +59,30 @@ void xbox_SetMapSize(size_t bytes)
+     g_xbox_map_size = bytes;
+ }
+ 
++static uint32_t g_tls_dir_fallback;
++
++/* Bytes of TLS block a directory asks for (template, zero fill, rounded, plus
++ * the slot-0 pointer), or 0 when it cannot be one: a template outside the
++ * image, or more than fits in the 0x200 bytes below the thread slot. */
++static uint32_t tls_block_size(const uint32_t *tls, uint32_t image_size)
++{
++    uint32_t start = tls[0], end = tls[1], zero_fill = tls[4];
++    uint32_t lo = XBOX_BASE_ADDRESS, hi = XBOX_BASE_ADDRESS + image_size;
++    uint32_t init, total;
++    if (end < start || (start && (start < lo || end > hi)) || zero_fill > 0x200)
++        return 0;
++    init = end - start;
++    if (init > 0x200)
++        return 0;
++    total = ((init + zero_fill + 0xF) & ~0xFu) + 4;
++    return total <= 0x200 ? total : 0;
++}
++
++void xbox_SetTlsDirectoryFallback(uint32_t va)
++{
++    g_tls_dir_fallback = va;
++}
++
+ /* File mapping handle for the Xbox memory region.
+  * Using CreateFileMapping + MapViewOfFileEx allows mirror views to alias
+  * the same physical pages as the base region, so writes to mirror addresses
+@@ -2338,15 +2362,27 @@ BOOL xbox_MemoryLayoutInit(const void *xbe_data, size_t xbe_size)
+         #define FAKE_TLS_THREAD_VA 0x00770200  /* what slot 0 points at   */
+         {
+             DWORD tls_dir_va = *(const DWORD *)(xbe + XBE_TLS_ADDR_OFFSET);
++            uint32_t image_size = *(const uint32_t *)(xbe + 0x010C);  /* SizeOfImage */
++            /* A directory is sane when it sits in the image, its template
++             * does too, and the block fits below the thread slot. */
++            #define TLS_DIR_OK(va) ((va) >= XBOX_BASE_ADDRESS && \
++                (va) + 24 <= XBOX_BASE_ADDRESS + image_size && \
++                tls_block_size((const uint32_t *)XBOX_VA(va), image_size) != 0)
++
++            if (tls_dir_va && !TLS_DIR_OK(tls_dir_va)) {
++                fprintf(stderr, "  TLS: the header's directory at 0x%08X is not "
++                        "one%s\n", (unsigned)tls_dir_va,
++                        g_tls_dir_fallback ? "; using the title's" : "; skipping TLS");
++                tls_dir_va = (g_tls_dir_fallback && TLS_DIR_OK(g_tls_dir_fallback))
++                           ? g_tls_dir_fallback : 0;
++            }
++            #undef TLS_DIR_OK
+ 
+             if (tls_dir_va) {
+                 const uint32_t *tls = (const uint32_t *)XBOX_VA(tls_dir_va);
+                 uint32_t data_start = tls[0];
+-                uint32_t data_end   = tls[1];
+-                uint32_t zero_fill  = tls[4];
+-                uint32_t init_size  = (data_end > data_start)
+-                                    ? data_end - data_start : 0;
+-                uint32_t total      = ((init_size + zero_fill + 0xF) & ~0xFu) + 4;
++                uint32_t init_size  = (tls[1] > data_start) ? tls[1] - data_start : 0;
++                uint32_t total      = tls_block_size(tls, image_size);
+ 
+                 memset(XBOX_VA(FAKE_TLS_BLOCK_VA), 0, total);
+                 memset(XBOX_VA(FAKE_TLS_THREAD_VA), 0, 64);
+diff --git a/xboxrecomp/src/kernel/xbox_memory_layout.h b/xboxrecomp/src/kernel/xbox_memory_layout.h
+index 0da280c..f17e243 100644
+--- a/xboxrecomp/src/kernel/xbox_memory_layout.h
++++ b/xboxrecomp/src/kernel/xbox_memory_layout.h
+@@ -78,6 +78,15 @@ extern size_t g_xbox_total_ram;
+ extern size_t g_xbox_map_size;
+ void xbox_SetMapSize(size_t bytes);
+ 
++/* The TLS directory to use when the XBE header's TlsAddress does not point at
++ * a sane one. Some dumps carry a rewritten header -- Animaniacs' US XBE was
++ * re-flagged as a debug image, and its TlsAddress lands in the header's own
++ * strings, whose "zero fill" size then walked a memset off the end of RAM --
++ * while the image itself is untouched, so the title knows where its
++ * _tls_used really is. Zero (the default) skips TLS setup for a bad header
++ * instead of trusting it. Set before xbox_MemoryLayoutInit(). */
++void xbox_SetTlsDirectoryFallback(uint32_t va);
++
+ /* Carve a pure address-space reservation from the mapped range above RAM.
+  * Returns 0 if the mapping is no larger than RAM, or if it is exhausted.
+  * See the implementation for why reservations must not come from the heap. */
