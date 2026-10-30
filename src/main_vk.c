@@ -302,6 +302,10 @@ static void *guest_main(void *unused)
     }
     printf("XBE loaded: %zu bytes\n", xbe_size);
 
+    /* The US dump's header was re-flagged as a debug XBE and its TlsAddress
+     * points into the header's strings; the image is the same as the PAL
+     * one, whose header names the real directory (_tls_used, in .data). */
+    xbox_SetTlsDirectoryFallback(0x001DEF40u);
     if (!xbox_MemoryLayoutInit(xbe_data, xbe_size)) {
         fprintf(stderr, "Failed to initialize the Xbox memory layout.\n");
         exit(1);
