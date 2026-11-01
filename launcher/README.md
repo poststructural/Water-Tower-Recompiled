@@ -33,25 +33,30 @@ python launcher/run_launcher.py --help     # the same steps from the command lin
    `logs/`. If the game crashes or closes during start-up, Home shows the end
    of its log and a Copy system info button for bug reports.
 
-The window has tabs like the Crackdown recomp's launcher:
+Home is a night scene of the studio lot with our water tower, the wordmark,
+one big Play button (it reads Set up, Build or Play, whichever comes next),
+Verify files, Game files, Updates and Settings, and a status card: the
+installed version, renderer, save profile, controller, and whether the game
+files are verified, with the progress of whatever is running. The other pages
+are down the left:
 
 | Tab | What it sets |
 |---|---|
-| Home | Play, verify game files, check for updates, change the game source, Add to Steam |
+| Home | Play, verify game files, change the game files, updates, the status card |
 | Display | Windowed or fullscreen (borderless, monitor resolution), window size (720p to 4K, ultrawide, native, or custom), aspect ratio (auto, 4:3, 16:9, 16:10, 21:9, 32:9), HUD and menu text (keep 4:3 or stretch), v-sync, frame rate counter |
 | Graphics | Internal resolution (auto or 1x-8x), the auto limit, anti-aliasing, texture filtering |
 | Gameplay | Skip intros, close the launcher on Play |
 | Saves | Save profiles (each its own save folder), open or back up saves |
 | Mods | Add mods from a .zip or folder, turn them on or off, load order, conflicts |
 | Updates | Release or main channel, update source, build / update, install an update from a file, installed builds, build log |
-| About | Logs, system info, developer options |
+| About | Logs, system info, Add to Steam, developer options |
 
 Display, Graphics and Gameplay edit the game's own `settings.ini` beside the
 exe, in place: comments and keys the launcher doesn't know are kept. The keys
 are the ones in `docs/SETTINGS.md`; a file from the first version (width,
 height, fullscreen, widescreen) is read, and each old key is replaced by its
-new one when that setting is saved. Q / E switch tabs and Esc goes
-back; on Windows a controller works too (LB / RB tabs, D-pad, A, B).
+new one when that setting is saved. Q / E switch pages and Esc goes
+back; on Windows a controller works too (LB / RB pages, D-pad, A, B).
 
 Add to Steam puts the launcher in your Steam library as a non-Steam game
 (close Steam first; the old `shortcuts.vdf` is backed up beside it).
@@ -162,6 +167,13 @@ On GitLab (`.gitlab-ci.yml`):
   a release linking it; installed launchers offer it as an update.
 
 The `.github/workflows` files do the same on GitHub.
+
+## Art
+
+Everything on Home is drawn from scratch by `tools/make_art.py` (Pillow) into
+`animaniacs_launcher/assets/ui`; nothing comes from the game. Rerun it after
+changing the art. The display font is Luckiest Guy (Apache-2.0), loaded for
+the launcher only.
 
 ## Tests
 

@@ -51,3 +51,10 @@ Warthog and published by Ignition Entertainment. None of the game's data is in
 this repository; its code is translated from the player's own copy when
 building. `src/recomp_manual.c` holds hand-written replacements for a few of
 the game's functions.
+
+## The launcher
+
+| Part | License |
+|---|---|
+| [Luckiest Guy](https://fonts.google.com/specimen/Luckiest+Guy) by Astigmatic, the launcher's display font (`launcher/animaniacs_launcher/assets/fonts`) | Apache-2.0 (license text beside the font) |
+| The launcher's art (`assets/ui`): the studio-lot scene, water tower, wordmark, buttons and panels | Drawn for this project by `launcher/tools/make_art.py`; nothing from the game |
