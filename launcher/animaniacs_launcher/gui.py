@@ -1,8 +1,9 @@
 """The launcher window (tkinter, so it runs wherever Python does).
 
-Laid out like the Crackdown recomp's launcher: a tab bar (Home, Display,
-Graphics, Gameplay, Saves, Updates, About), a page per tab, and a status
-line. Display, graphics and gameplay options are the game's own
+A rail of pages on the left (Home, Display, Graphics, Gameplay, Saves,
+Mods, Archipelago, Updates, About) and the page beside it. Home is the
+studio-lot scene with Play and a status card (home.py); the other pages are
+the settings, with a status line under them. Display, graphics and gameplay options are the game's own
 settings.ini, edited in place; nothing is written until Save settings (or
 Play, which saves first). Keyboard: Q / E switch tabs, Esc goes back. A
 controller works too on Windows: LB / RB tabs, D-pad moves, A selects,
@@ -23,7 +24,7 @@ from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
 from . import (HOME_URL, __version__, archipelago, build, config, gamefiles, gamepad, gamesettings,
-               mods, play, profiles, steam, updates)
+               home, mods, play, profiles, steam, updates)
 from .gamesettings import (ASPECTS, HUDS, MAX_SCALES, MODES, MSAA, RENDER_SCALES, RESOLUTIONS,
                            TEXTURE_FILTERS, VSYNC)
 
@@ -32,17 +33,23 @@ TABS = ["HOME", "DISPLAY", "GRAPHICS", "GAMEPLAY", "SAVES", "MODS", "ARCHIPELAGO
         "ABOUT"]
 UPDATES_TAB = TABS.index("UPDATES")
 
-# Warner Bros. water tower palette on a dark backdrop.
-BG = "#0d1117"
-PANEL = "#161d26"
-FIELD = "#1f2833"
-LINE = "#2b3644"
-TEXT = "#e8edf2"
-MUTED = "#93a1b0"
+# The water tower's yellow on the studio lot's night sky (assets/ui).
+BG = "#0b0814"
+RAIL = "#0f0b1c"
+PANEL = "#151026"
+FIELD = "#211a37"
+LINE = "#342a52"
+TEXT = "#f1ecfa"
+MUTED = "#a99fc2"
 GOLD = "#f5b82e"
 GOLD_HI = "#ffd166"
-RED = "#e05a47"
+RED = "#ff7a66"
 GREEN = "#5fcf80"
+
+# Rail icons: Segoe Fluent Icons / MDL2 Assets on Windows, letters elsewhere.
+RAIL_ICONS = {"HOME": "\ue80f", "DISPLAY": "\ue7f4", "GRAPHICS": "\ue790", "GAMEPLAY": "\ue7fc",
+              "SAVES": "\ue74e", "MODS": "\uea86", "ARCHIPELAGO": "\ue774", "UPDATES": "\ue895",
+              "ABOUT": "\ue946"}
 
 UI = "Segoe UI" if sys.platform == "win32" else "DejaVu Sans"
 MONO = "Consolas" if sys.platform == "win32" else "DejaVu Sans Mono"
@@ -78,7 +85,7 @@ def _style(root: tk.Tk) -> None:
     s.configure("PanelMuted.TLabel", background=PANEL, foreground=MUTED)
     s.configure("Title.TLabel", font=(UI, 26, "bold"), foreground=GOLD)
     s.configure("Sub.TLabel", font=(UI, 12), foreground=MUTED)
-    s.configure("H.TLabel", font=(UI, 14, "bold"), background=PANEL)
+    s.configure("H.TLabel", font=home.display_font(root, 20, UI), foreground=GOLD, background=PANEL)
     s.configure("Status.TLabel", background=PANEL, foreground=MUTED, font=(UI, 10))
     s.configure("Good.TLabel", background=PANEL, foreground=GREEN)
     s.configure("Bad.TLabel", background=PANEL, foreground=RED)
@@ -111,6 +118,9 @@ def _style(root: tk.Tk) -> None:
     s.configure("TEntry", fieldbackground=FIELD, foreground=TEXT, padding=5)
     s.configure("TSpinbox", fieldbackground=FIELD, foreground=TEXT, arrowcolor=GOLD, padding=4)
     s.configure("Horizontal.TProgressbar", background=GOLD, troughcolor=FIELD, bordercolor=LINE)
+    s.configure("Rail.TFrame", background=RAIL)
+    s.configure("PageTitle.TLabel", background=PANEL, foreground=GOLD,
+                font=home.display_font(root, 22, UI))
 
 
 class Choice:
@@ -153,8 +163,8 @@ class App:
         self.pad = gamepad.Pad()
 
         root.title("Animaniacs: The Great Edgar Hunt — Recompiled")
-        root.geometry("1100x720")
-        root.minsize(940, 620)
+        root.geometry("1280x780")
+        root.minsize(1080, 700)
         _style(root)
         self._build_ui()
         self.load_game_settings()
@@ -174,32 +184,25 @@ class App:
 
     def _build_ui(self) -> None:
         r = self.root
-        head = ttk.Frame(r)
-        head.pack(fill="x", padx=28, pady=(18, 6))
-        ttk.Label(head, text="ANIMANIACS", style="Title.TLabel").pack(side="left")
-        ttk.Label(head, text="  The Great Edgar Hunt  ·  Recompiled",
-                  style="Sub.TLabel").pack(side="left", pady=(10, 0))
-        ttk.Label(head, text=f"LAUNCHER {__version__}", style="Muted.TLabel").pack(side="right")
-
-        bar = ttk.Frame(r)
-        bar.pack(fill="x", padx=22)
-        self.tab_buttons = []
-        for i, name in enumerate(TABS):
-            b = ttk.Button(bar, text=name, style="Tab.TButton", takefocus=False, width=1,
-                           command=lambda i=i: self.show_tab(i))
-            b.pack(side="left", expand=True, fill="x")
-            self.tab_buttons.append(b)
+        self._build_rail()
 
         # The status line is packed first so a tall page never pushes it off.
-        foot = ttk.Frame(r, style="Panel.TFrame")
-        foot.pack(side="bottom", fill="x", padx=28, pady=(0, 16))
+        self.foot = foot = ttk.Frame(r, style="Panel.TFrame")
+        foot.pack(side="bottom", fill="x")
+        tk.Frame(foot, bg=LINE, height=1).pack(fill="x", side="top")
         self.status = ttk.Label(foot, style="Status.TLabel")
-        self.status.pack(side="left", padx=14, pady=8)
+        self.status.pack(side="left", padx=18, pady=8)
         self.hints = ttk.Label(foot, style="Status.TLabel")
-        self.hints.pack(side="right", padx=14)
+        self.hints.pack(side="right", padx=18)
 
         self.body = ttk.Frame(r, style="Panel.TFrame")
-        self.body.pack(fill="both", expand=True, padx=28)
+        self.body.pack(fill="both", expand=True)
+        # a strip of the Home scene over each settings page
+        self.banner = tk.Canvas(self.body, height=96, width=1, bg=PANEL, highlightthickness=0, bd=0)
+        self._banner_img = self._asset(os.path.join("ui", "banner.png"))
+        if self._banner_img:
+            item = self.banner.create_image(0, 0, anchor="ne", image=self._banner_img)
+            self.banner.bind("<Configure>", lambda e: self.banner.coords(item, e.width, 0))
         self.pages = [self._home(), self._display(), self._graphics(), self._gameplay(),
                       self._saves(), self._mods(), self._archipelago(), self._updates(),
                       self._about()]
@@ -237,70 +240,149 @@ class App:
 
     # Pages
 
+    def _build_rail(self) -> None:
+        """The page list down the left, with the icon and the launcher's version."""
+        rail = tk.Frame(self.root, bg=RAIL, width=256)
+        rail.pack(side="left", fill="y")
+        rail.pack_propagate(False)
+        top = tk.Frame(rail, bg=RAIL)
+        top.pack(fill="x", padx=14, pady=(20, 18))
+        self._rail_icon = self._asset("icon.png", 6)
+        if self._rail_icon:
+            tk.Label(top, image=self._rail_icon, bg=RAIL).pack(side="left")
+        names = tk.Frame(top, bg=RAIL)
+        names.pack(side="left", padx=10)
+        tk.Label(names, text="ANIMANIACS", bg=RAIL, fg=GOLD, font=home.display_font(rail, 13, UI)).pack(anchor="w")
+        tk.Label(names, text="Water Tower Recompiled", bg=RAIL, fg=MUTED, font=(UI, 9)).pack(anchor="w")
+
+        icon_font = None
+        if sys.platform == "win32":
+            import tkinter.font as tkfont
+            fams = set(tkfont.families(rail))
+            icon_font = next(((f, 13) for f in ("Segoe Fluent Icons", "Segoe MDL2 Assets") if f in fams), None)
+        self.tab_buttons = []
+        for i, name in enumerate(TABS):
+            row = tk.Frame(rail, bg=RAIL, cursor="hand2")
+            row.pack(fill="x", padx=12, pady=1)
+            bar = tk.Frame(row, bg=RAIL, width=4)
+            bar.pack(side="left", fill="y", pady=8)
+            icon = tk.Label(row, text=RAIL_ICONS[name] if icon_font else "•", bg=RAIL, fg=MUTED,
+                            font=icon_font or (UI, 12), width=3)
+            icon.pack(side="left", padx=(8, 2), pady=9)
+            label = tk.Label(row, text=name.title(), bg=RAIL, fg=MUTED, font=(UI, 11, "bold"), anchor="w")
+            label.pack(side="left", fill="x", expand=True)
+            parts = (row, bar, icon, label)
+            for w in parts:
+                w.bind("<Button-1>", lambda _e, i=i: self.show_tab(i))
+                w.bind("<Enter>", lambda _e, i=i: self._rail_hover(i, True))
+                w.bind("<Leave>", lambda _e, i=i: self._rail_hover(i, False))
+            self.tab_buttons.append(parts)
+        tk.Label(rail, text=f"Launcher {__version__}", bg=RAIL, fg="#6f6588",
+                 font=(UI, 9)).pack(side="bottom", anchor="w", padx=22, pady=14)
+
+    def _rail_paint(self, i: int, hover: bool = False) -> None:
+        row, bar, icon, label = self.tab_buttons[i]
+        on = i == self.tab
+        bg = "#221a3a" if on else "#18122b" if hover else RAIL
+        for w in (row, icon, label):
+            w.config(bg=bg)
+        bar.config(bg=GOLD if on else bg)
+        icon.config(fg=GOLD if on else TEXT if hover else MUTED)
+        label.config(fg=TEXT if on or hover else MUTED)
+
+    def _rail_hover(self, i: int, inside: bool) -> None:
+        self._rail_paint(i, inside)
+
+    def _asset(self, name: str, subsample: int = 1) -> tk.PhotoImage | None:
+        try:
+            im = tk.PhotoImage(file=os.path.join(os.path.dirname(__file__), "assets", name))
+            return im.subsample(subsample) if subsample > 1 else im
+        except tk.TclError:
+            return None
+
     def _home(self) -> ttk.Frame:
+        """Home: the scene, the wordmark, Play, four smaller buttons and the status card."""
         self.save_buttons: list[ttk.Button] = []
-        f = self._page()
-        f.columnconfigure(1, weight=1)
-        menu = ttk.Frame(f, style="Panel.TFrame")
-        menu.grid(row=0, column=0, sticky="nw")
-        self.m_play = ttk.Button(menu, style="Menu.TButton", width=22, command=self.play_or_setup)
-        self.m_verify = ttk.Button(menu, text="VERIFY GAME FILES", style="Menu.TButton", width=22,
-                                   command=self.verify)
-        self.m_updates = ttk.Button(menu, text="CHECK FOR UPDATES", style="Menu.TButton", width=22,
-                                    command=lambda: (self.show_tab(UPDATES_TAB), self.check_updates()))
-        self.m_settings = ttk.Button(menu, text="SETTINGS", style="Menu.TButton", width=22,
-                                     command=lambda: self.show_tab(1))
-        self.m_quit = ttk.Button(menu, text="QUIT", style="Menu.TButton", width=22, command=self.quit)
-        for b in (self.m_play, self.m_verify, self.m_updates, self.m_settings, self.m_quit):
-            b.pack(anchor="w", pady=2)
+        f = ttk.Frame(self.body, style="Panel.TFrame")
+        hp = self.homepage = home.HomeCanvas(f, UI)
+        hp.canvas.pack(fill="both", expand=True)
+        c = hp.canvas
+        self.m_play = hp.button("play", "PLAY", self.play_or_setup)
+        self.m_verify = hp.button("button", "VERIFY FILES", self.verify)
+        self.b_image = self.b_folder = hp.button("button", "GAME FILES", self._game_files_menu)
+        self.m_updates = hp.button("button", "UPDATES",
+                                   lambda: (self.show_tab(UPDATES_TAB), self.check_updates()))
+        self.m_settings = hp.button("button", "SETTINGS", lambda: self.show_tab(1))
 
-        card = ttk.Frame(f, style="Panel.TFrame")
-        card.grid(row=0, column=1, sticky="nw", padx=(40, 0))
-        ttk.Label(card, text="GAME FILES", style="PanelMuted.TLabel").pack(anchor="w")
-        self.h_game = ttk.Label(card, style="Panel.TLabel", wraplength=480, justify="left")
-        self.h_game.pack(anchor="w", pady=(2, 6))
-        src = ttk.Frame(card, style="Panel.TFrame")
-        src.pack(anchor="w")
-        self.b_image = ttk.Button(src, text="Disc image or .zip…", command=self.pick_image)
-        self.b_image.pack(side="left")
-        self.b_folder = ttk.Button(src, text="Game folder…", command=self.pick_folder)
-        self.b_folder.pack(side="left", padx=6)
-        ttk.Label(card, text="GAME BUILD", style="PanelMuted.TLabel").pack(anchor="w", pady=(18, 0))
-        self.h_build = ttk.Label(card, style="Panel.TLabel", wraplength=480, justify="left")
-        self.h_build.pack(anchor="w", pady=(2, 0))
-        self.h_launcher = ttk.Label(card, style="Panel.TLabel", foreground=GOLD, cursor="hand2",
-                                    wraplength=480)
-        self.h_launcher.pack(anchor="w", pady=(10, 0))
-        self.h_launcher.bind("<Button-1>", lambda _e: self.update_launcher())
-        self.b_steam = ttk.Button(card, text="Add to Steam", command=self.add_to_steam)
-        self.b_steam.pack(anchor="w", pady=(18, 0))
+        # the status card: four facts on the left, the state and progress on the right
+        self.card_keys = [home.CanvasText(hp, (UI, 10), home.MUTED) for _ in range(4)]
+        self.card_vals = [home.CanvasText(hp, (UI, 10, "bold"), home.TEXT) for _ in range(4)]
+        for k, name in zip(self.card_keys, ("Version", "Renderer", "Save profile", "Controller")):
+            k.config(text=name)
+        self.card_sep = c.create_line(0, 0, 0, 0, fill="#3a3058")
+        self.h_state = home.CanvasText(hp, home.display_font(c, 13, UI), home.TEXT, width=420)
+        self.step = home.CanvasText(hp, (UI, 10), home.MUTED, width=420)
+        self.bar = home.CanvasBar(hp, 420)
+        self.b_cancel = home.CanvasText(hp, (UI, 10, "underline"), home.GOLD, anchor="ne")
+        c.tag_bind(self.b_cancel.item, "<Button-1>", lambda _e: self.busy and self.cancel.set())
+        self.h_launcher = home.CanvasText(hp, (UI, 10, "underline"), home.GOLD, anchor="sw")
+        c.tag_bind(self.h_launcher.item, "<Button-1>", lambda _e: self.update_launcher())
 
-        prog = ttk.Frame(f, style="Panel.TFrame")
-        prog.grid(row=1, column=0, columnspan=2, sticky="we", pady=(24, 0))
-        self.step = ttk.Label(prog, style="Panel.TLabel")
-        self.step.pack(anchor="w")
-        row = ttk.Frame(prog, style="Panel.TFrame")
-        row.pack(fill="x", pady=(4, 0))
-        self.bar = ttk.Progressbar(row, mode="determinate")
-        self.bar.pack(side="left", fill="x", expand=True)
-        self.b_cancel = ttk.Button(row, text="Cancel", command=self.cancel.set)
-        self.b_cancel.pack(side="left", padx=8)
+        def card(x, y, w, h):
+            for i, (k, v) in enumerate(zip(self.card_keys, self.card_vals)):
+                k.place(x + 26, y + 18 + i * 25)
+                v.place(x + 134, y + 18 + i * 25)
+            sx = x + 318
+            c.coords(self.card_sep, sx, y + 18, sx, y + h - 18)
+            c.coords(hp.icon, sx + 22, y + 20)
+            right = sx + 80
+            width = x + w - right - 26
+            self.h_state.place(right, y + 22)
+            c.itemconfig(self.h_state.item, width=width)
+            self.step.place(right, y + 52)
+            c.itemconfig(self.step.item, width=width)
+            self.bar.width = width
+            self.bar.place(right, y + h - 30)
+            self.b_cancel.place(x + w - 26, y + h - 52)
+            self.h_launcher.place(x + 6, y - 10)
+        hp.card_layout = [card]
 
-        self.crash = ttk.Frame(f, style="Panel.TFrame")
-        self.crash.grid(row=2, column=0, columnspan=2, sticky="nsew", pady=(16, 0))
-        f.rowconfigure(2, weight=1)
-        self.crash_label = ttk.Label(self.crash, style="Bad.TLabel")
-        self.crash_label.pack(anchor="w")
-        self.crash_text = tk.Text(self.crash, height=8, bg=FIELD, fg=TEXT, relief="flat",
+        # Shown over the scene when the game crashes or quits during start-up.
+        self.crash = tk.Frame(f, bg=PANEL, highlightthickness=1, highlightbackground=RED)
+        self.crash_label = ttk.Label(self.crash, style="Bad.TLabel", wraplength=640)
+        self.crash_label.pack(anchor="w", padx=16, pady=(14, 0))
+        self.crash_text = tk.Text(self.crash, height=10, bg=FIELD, fg=TEXT, relief="flat",
                                   font=(MONO, 9), state="disabled")
-        self.crash_text.pack(fill="both", expand=True, pady=4)
+        self.crash_text.pack(fill="both", expand=True, padx=16, pady=8)
         cb = ttk.Frame(self.crash, style="Panel.TFrame")
-        cb.pack(anchor="w")
+        cb.pack(anchor="w", padx=16, pady=(0, 14))
         ttk.Button(cb, text="Open log", command=lambda: self.game_log and _open_folder_file(self.game_log)).pack(side="left")
         ttk.Button(cb, text="Copy system info", command=self.copy_info).pack(side="left", padx=6)
-        ttk.Button(cb, text="Dismiss", command=self.crash.grid_remove).pack(side="left")
-        self.crash.grid_remove()
+        ttk.Button(cb, text="Dismiss", command=self._hide_crash).pack(side="left")
         return f
+
+    def _show_crash(self) -> None:
+        self.crash.place(relx=0.5, rely=0.45, anchor="center", relwidth=0.7, relheight=0.6)
+        self.crash.lift()
+
+    def _hide_crash(self) -> None:
+        self.crash.place_forget()
+        self.homepage.canvas.focus_set()
+
+    def _game_files_menu(self) -> None:
+        m = tk.Menu(self.root, tearoff=0, bg=FIELD, fg=TEXT, activebackground=GOLD,
+                    activeforeground=BG, font=(UI, 11), bd=0)
+        m.add_command(label="Disc image or .zip…", command=self.pick_image)
+        m.add_command(label="Game folder…", command=self.pick_folder)
+        if self.st.game_dir:
+            m.add_separator()
+            m.add_command(label="Open the game folder", command=lambda: _open_folder(self.st.game_dir))
+        x = self.root.winfo_pointerx()
+        y = self.root.winfo_pointery()
+        try:
+            m.tk_popup(x, y)
+        finally:
+            m.grab_release()
 
     def _display(self) -> ttk.Frame:
         f = self._page()
@@ -580,6 +662,8 @@ class App:
         ttk.Button(acts, text="Copy system info", command=self.copy_info).pack(side="left")
         ttk.Button(acts, text="Launcher data folder",
                    command=lambda: _open_folder(config.data_dir())).pack(side="left", padx=8)
+        self.b_steam = ttk.Button(acts, text="Add to Steam", command=self.add_to_steam)
+        self.b_steam.pack(side="left")
 
         ttk.Label(f, text="DEVELOPER", style="PanelMuted.TLabel").grid(sticky="w", columnspan=3, pady=(10, 4))
         self.console = tk.BooleanVar(value=self.st.show_console)
@@ -625,8 +709,15 @@ class App:
         self.pages[self.tab].pack_forget()
         self.tab = i % len(TABS)
         self.pages[self.tab].pack(fill="both", expand=True)
-        for j, b in enumerate(self.tab_buttons):
-            b.configure(style="TabOn.TButton" if j == self.tab else "Tab.TButton")
+        for j in range(len(self.tab_buttons)):
+            self._rail_paint(j)
+        # Home draws its own status card; the line underneath is for the other pages.
+        if self.tab == 0:
+            self.foot.pack_forget()
+            self.banner.pack_forget()
+        else:
+            self.foot.pack(side="bottom", fill="x", before=self.body)
+            self.banner.pack(side="top", fill="x", before=self.pages[self.tab])
         if TABS[self.tab] == "SAVES":
             self._fill_profiles()
         if TABS[self.tab] == "MODS":
@@ -650,6 +741,9 @@ class App:
                 if f:
                     return f
             return None
+        if self.tab == 0:
+            self.homepage.canvas.focus_set()
+            return
         w = first(self.pages[self.tab])
         if w:
             w.focus_set()
@@ -679,6 +773,11 @@ class App:
                 self.show_tab(self.tab + 1)
             elif b & gamepad.B:
                 self.back()
+            elif focus is self.homepage.canvas and b & (gamepad.DIRS | gamepad.A):
+                if b & gamepad.A:
+                    self.homepage.invoke()
+                else:
+                    self.homepage.move(1 if b & (gamepad.DOWN | gamepad.RIGHT) else -1)
             elif b & (gamepad.DOWN | gamepad.UP):
                 nxt = (focus.tk_focusNext() if b & gamepad.DOWN else focus.tk_focusPrev()) if focus else None
                 (nxt or self.root).focus_set()
@@ -695,9 +794,11 @@ class App:
 
     def _hints(self) -> None:
         if getattr(self, "_pad_seen", False):
-            self.hints.config(text="LB/RB tabs   D-pad move   ◀▶ change   A select   B back")
+            text = "LB/RB pages   D-pad move   ◀▶ change   A select   B back"
         else:
-            self.hints.config(text="Q/E tabs   Tab move   Space select   Esc back")
+            text = "Q/E pages   Tab move   Space select   Esc back"
+        self.hints.config(text=text)
+        self.homepage.canvas.itemconfig(self.homepage.hint, text=text.replace("change   ", ""))
 
     # ── Game settings (settings.ini) ────────────────────────────────────
 
@@ -1020,17 +1121,8 @@ class App:
 
     def refresh(self) -> None:
         st = self.st
-        if st.game_dir:
-            chk = gamefiles.check_dir(st.game_dir)
-            self.game_ok = chk.ok
-            self.h_game.config(text=f"✓ {chk.summary()}\n{st.game_dir}" if chk.ok
-                               else f"✗ {st.game_dir}\n{chk.summary()}",
-                               foreground=TEXT if chk.ok else RED)
-        else:
-            self.game_ok = False
-            self.h_game.config(text="Point the launcher at your own copy of the game: an Xbox disc "
-                                    "image (.iso), a .zip, or a folder with default.xbe.",
-                               foreground=TEXT)
+        chk = gamefiles.check_dir(st.game_dir) if st.game_dir else None
+        self.game_ok = bool(chk and chk.ok)
 
         why = build.supported()
         tc = build.detect()
@@ -1047,7 +1139,6 @@ class App:
                 if self.latest.notes:
                     avail += f"\n{self.latest.notes.strip().splitlines()[0][:110]}"
                 line += "\n" + avail
-        self.h_build.config(text=line)
         self.u_status.config(text=line)
         if why:
             self.tools_label.config(text=why)
@@ -1070,15 +1161,16 @@ class App:
         self.b_update.config(state="normal" if can_build else "disabled",
                              text="Build" if not st.current_build else "Update")
         if running:
-            self.m_play.config(text="PLAYING…", state="disabled")
+            self.m_play.config(text="PLAYING", state="disabled")
         elif not self.game_ok:
-            self.m_play.config(text="SET UP GAME FILES", state=idle)
+            self.m_play.config(text="SET UP", state=idle)
         elif not installed:
-            self.m_play.config(text="BUILD THE GAME", state="normal" if can_build else "disabled")
+            self.m_play.config(text="BUILD", state="normal" if can_build else "disabled")
         else:
             self.m_play.config(text="PLAY", state=idle)
         self.m_verify.config(state="normal" if st.game_dir and not self.busy else "disabled")
-        self.b_cancel.config(state="normal" if self.busy else "disabled")
+        self.b_cancel.config(text="Cancel" if self.busy else "")
+        self._fill_card(chk, installed, running, avail, why, can_build)
 
         game = "Playing" if running else "Ready" if self.game_ok and installed else \
             "Needs a build" if self.game_ok else "Not set up"
@@ -1086,6 +1178,56 @@ class App:
                                 f"PROFILE  {st.profile or 'Default'}      "
                                 f"FOLLOW  {CHANNELS[st.channel].split(' (')[0]}")
         self._hints()
+
+    def _fill_card(self, chk, installed: str, running: bool, avail: str, why: str | None,
+                   can_build: bool) -> None:
+        """Home's status card: what's installed, and the one thing to do next."""
+        st = self.st
+        hp = self.homepage
+        build_name = installed or "Not built yet"
+        if st.custom_exe:
+            build_name = "Your own exe"
+        pad = "Connected" if self.pad.dll and self.pad.connected() else \
+            "Keyboard (plug one in any time)" if sys.platform == "win32" else "SDL pads in game"
+        if st.ap_enabled and st.ap_slot:
+            pad += f"   ·   AP: {st.ap_slot}"
+        for v, text in zip(self.card_vals, (build_name, "Vulkan (xemu NV2A)",
+                                            st.profile or "Default", pad)):
+            v.config(text=text)
+        self.card_vals[3].config(foreground=home.GREEN if pad.startswith("Connected") else home.TEXT)
+
+        note = getattr(self, "last_note", "")
+        if self.busy:
+            kind, head = "busy", getattr(self, "busy_title", "") or "Working"
+        elif note:
+            kind, head = "bad", note.split(":")[0]
+        elif running:
+            kind, head = "ok", "Playing. Have fun!"
+        elif chk is None:
+            kind, head = "warn", "Show the launcher your copy of the game"
+        elif not chk.ok:
+            kind, head = "bad", "Game files need a look"
+        elif not installed:
+            kind, head = ("warn", "Game files verified. Build the game next") if can_build else \
+                ("bad", why or "Build tools needed (see Updates)")
+        elif avail:
+            kind, head = "warn", "Ready to play. An update is available"
+        else:
+            kind, head = "ok", "Game files verified. Ready to play"
+        hp.set_icon(kind)
+        self.h_state.config(text=head, foreground={"ok": home.GREEN, "bad": home.RED}.get(kind, home.TEXT))
+        self.bar.set_colour(home.BLUE if kind == "busy" else home.GREEN if kind == "ok" else home.GOLD)
+        if not self.busy:
+            if note:
+                sub = note.split(":", 1)[-1].strip()
+            elif chk is None:
+                sub = "An Xbox disc image (.iso), a .zip, or a folder with default.xbe. Nothing is uploaded."
+            elif not chk.ok:
+                sub = chk.summary()
+            else:
+                sub = f"{chk.summary()}  ·  {avail.splitlines()[0]}" if avail else chk.summary()
+            self.step.config(text=sub)
+            self.bar.config(mode="determinate", maximum=1, value=1 if kind == "ok" else 0)
 
     def _fill_builds(self) -> None:
         self.builds.delete(0, "end")
@@ -1152,8 +1294,8 @@ class App:
             self.crash_text.delete("1.0", "end")
             self.crash_text.insert("end", play.log_tail(self.game_log) or "(the log is empty)")
             self.crash_text.config(state="disabled")
-            self.crash.grid()
             self.show_tab(0)
+            self._show_crash()
         self.refresh()
 
     def _log(self, s: str) -> None:
@@ -1163,6 +1305,8 @@ class App:
         if self.busy:
             return
         self.busy = True
+        self.busy_title = title
+        self.last_note = ""
         self.cancel.clear()
         self.events.put(("step", title))
         self.events.put(("progress", 0, 1))
@@ -1186,6 +1330,7 @@ class App:
             if err:
                 cancelled = isinstance(err, build.Cancelled) or str(err) == "cancelled"
                 self.step.config(text="Cancelled" if cancelled else f"{title} failed: {err}")
+                self.last_note = self.step.cget("text")
                 if not cancelled:
                     self._log(f"error: {err}")
                     if not quiet:
@@ -1374,7 +1519,7 @@ class App:
             messagebox.showerror("Play", str(e))
             return
         self.game_started = time.time()
-        self.crash.grid_remove()
+        self._hide_crash()
         self._log(f"Game started (log: {self.game_log})")
         if self.st.close_on_play:
             self.root.destroy()
@@ -1421,6 +1566,7 @@ def _open_folder_file(path: str) -> None:
 
 def run(smoke: bool = False) -> int:
     """smoke: show every tab, then close (a check that the window builds)."""
+    home.register_font()
     root = tk.Tk()
     try:
         icon = tk.PhotoImage(file=os.path.join(os.path.dirname(__file__), "assets", "icon.png"))

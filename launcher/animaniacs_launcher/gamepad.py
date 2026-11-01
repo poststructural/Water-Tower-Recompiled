@@ -12,6 +12,7 @@ import sys
 
 UP, DOWN, LEFT, RIGHT = 0x0001, 0x0002, 0x0004, 0x0008
 LB, RB, A, B = 0x0100, 0x0200, 0x1000, 0x2000
+DIRS = UP | DOWN | LEFT | RIGHT
 _STICK = 16000
 
 
@@ -57,6 +58,13 @@ class Pad:
                     b |= LEFT
                 return b
         return 0
+
+    def connected(self) -> bool:
+        """Whether any XInput pad is plugged in (for the status card)."""
+        if not self.dll:
+            return False
+        st = _State()
+        return any(self.dll.XInputGetState(i, ctypes.byref(st)) == 0 for i in range(4))
 
     def pressed(self) -> int:
         """Buttons that went down since the last call."""
